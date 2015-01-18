@@ -41,22 +41,23 @@ void Expect(bool condition, int line) {
    }
 }
 
-#if false
-void Test_Simple1(void) {
-   /* Program: 
-      var a = 5 */
+#if 0
+void Test_Simple1(void) { /* Program: var a = 5 */
+   SdValue_r program, var_a;
+   SdList_r functions, statements;
+   SdResult error;
+   Sad* sad;
+   SdEnv_r env;
 
-   SdValueRef program, var_a;
-   SdListRef functions = SdList_New(), statements = SdList_New();
-   SdError error;
-   Sad* sad = Sad_New();
-   SdEnvRef env = Sad_Env(sad);
-
+   functions = SdList_New();
+   statements = SdList_New();
+   sad = Sad_New();
+   env = Sad_Env(sad);
    SdList_Append(statements, SdAst_Var_New(env, SdString_FromCStr("a"), SdValue_NewInt(5)));
    program = SdAst_Program_New(env, functions, statements);
    SdEnv_AddProgramAst(env, program);
    error = SdEnv_ExecuteTopLevelStatements(env);
-   EXPECT(error == SD_SUCCESS);
+   EXPECT(error.code == SdErr_SUCCESS);
 
    /* Expect a global variable named "a" with integer value 5. */
    var_a = SdEnv_GetGlobalVariable(env, SdString_FromCStr("a"));
@@ -64,10 +65,9 @@ void Test_Simple1(void) {
    EXPECT(SdValue_Type(var_a) == SdType_INT);
    EXPECT(SdValue_GetInt(var_a) == 5);
 }
-#else
-void Test_Simple1(void) {}
 #endif
 
 int main(void) {
-   Test_Simple1();
+   /*Test_Simple1();*/
+   return 0;
 }

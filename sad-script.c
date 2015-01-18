@@ -56,9 +56,12 @@ void SdFree(void* ptr) {
 }
 
 char* SdStrdup(const char* src) {
+   size_t length;
+   char* dst;
+
    assert(src);
-   size_t length = strlen(src);
-   char* dst = SdAlloc(length + 1);
+   length = strlen(src);
+   dst = SdAlloc(length + 1);
    memcpy(dst, src, length);
    return dst;
 }
@@ -94,8 +97,10 @@ SdString* SdString_New(void) {
 }
 
 SdString* SdString_FromCStr(const char* cstr) {
+   SdString* self;
+
    assert(cstr);
-   SdString* self = SdAlloc(sizeof(SdString));
+   self = SdAlloc(sizeof(SdString));
    self->buffer = SdStrdup(cstr);
    self->length = strlen(cstr);
    return self;
@@ -132,10 +137,13 @@ int SdString_Length(SdString_r self) {
 }
 
 int SdString_Compare(SdString_r a, SdString_r b) {
+   const char* a_str;
+   const char* b_str;
+
    assert(a);
    assert(b);
-   const char* a_str = SdString_CStr(a);
-   const char* b_str = SdString_CStr(b);
+   a_str = SdString_CStr(a);
+   b_str = SdString_CStr(b);
    return strcmp(a_str, b_str);
 }
 
@@ -165,11 +173,13 @@ void SdStringBuf_AppendString(SdStringBuf_r self, SdString_r suffix) {
 }
 
 void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
+   int old_len, suffix_len, new_len;
+
    assert(self);
    assert(suffix);
-   int old_len = self->len;
-   int suffix_len = strlen(suffix);
-   int new_len = old_len + suffix_len;
+   old_len = self->len;
+   suffix_len = strlen(suffix);
+   new_len = old_len + suffix_len;
 
    self->str = SdRealloc(self->str, new_len + 1);
    memcpy(&self->str[old_len], suffix, suffix_len);
@@ -177,8 +187,9 @@ void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
 }
 
 void SdStringBuf_AppendInt(SdStringBuf_r self, int number) {
-   assert(self);
    char number_buf[30];
+
+   assert(self);
    memset(number_buf, 0, sizeof(number_buf));
    sprintf(number_buf, "%d", number);
    SdStringBuf_AppendCStr(self, number_buf);
@@ -202,8 +213,6 @@ struct SdValue_s {
    SdType type;
    SdValueUnion payload;
 };
-
-static SdValue* SdValue_New(void);
 
 SdValue* SdValue_NewNil(void) {
    return SdAlloc(sizeof(SdValue));
@@ -231,16 +240,20 @@ SdValue* SdValue_NewBool(bool x) {
 }
 
 SdValue* SdValue_NewString(SdString* x) {
+   SdValue* value;
+
    assert(x);
-   SdValue* value = SdValue_NewNil();
+   value = SdValue_NewNil();
    value->type = SdType_STRING;
    value->payload.string_value = x;
    return value;
 }
 
 SdValue* SdValue_NewList(SdList* x) {
+   SdValue* value;
+
    assert(x);
-   SdValue* value = SdValue_NewNil();
+   value = SdValue_NewNil();
    value->type = SdType_LIST;
    value->payload.list_value = x;
    return value;
@@ -255,6 +268,8 @@ void SdValue_Delete(SdValue* self) {
       case SdType_LIST:
          SdList_Delete(SdValue_GetList(self));
          break;
+      default:
+         break; /* nothing to free for these types */
    }
    SdFree(self);
 }
@@ -311,9 +326,11 @@ void SdList_Delete(SdList* self) {
 }
 
 void SdList_Append(SdList_r self, SdValue_r item) {
+   int new_count;
+   
    assert(self);
    assert(item);
-   int new_count = self->count + 1;
+   new_count = self->count + 1;
    self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r));
    assert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
    self->values[new_count - 1] = item;
@@ -355,10 +372,12 @@ size_t SdList_Count(SdList_r self) {
 }
 
 SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
+   size_t i;
+   SdValue_r old_value;
+
    assert(self);
    assert(index < self->count);
-   size_t i;
-   SdValue_r old_value = SdList_GetAt(self, index);
+   old_value = SdList_GetAt(self, index);
    for (i = index + 1; i < self->count; i++) {
       self->values[i - 1] = self->values[i];
    }
@@ -374,39 +393,14 @@ void SdList_Clear(SdList_r self) {
    self->count = 0;
 }
 
-/* SdEnv *************************************************************************************************************/
-typedef struct SdValueListNode_s {
-   SdValue* value;
-   struct SdValueListNode_s* next;
-} SdValueListNode;
-
-typedef struct SdEnv_BinarySearchResult_s {
-   int index; /* could be one past the end of the list if search name > everything */
-   bool exact; /* true = index is an exact match, false = index is the next highest match */
-} SdEnv_BinarySearchResult;
-
-struct SdEnv_s {
-   SdValue_r root; /* contains all living/connected objects */
-   SdValueListNode* values_list; /* contains all objects that haven't been deleted yet */
-};
-
-static SdEnv_BinarySearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
-static bool SdEnv_InsertByName(SdList_r list, SdValue_r item);
-
-/* list is (list (list <unrelated> name1:str ...) (list <unrelated> name2:str ...) ...) 
-The objects are sorted by name.  If an exact match is found, then its index is returned.  Otherwise the next highest 
-match is returned.  The index may be one past the end of the list indicating that the search_name is higher than any 
-name in the list. */
-SdEnv_BinarySearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r search_name) {
-   SdEnv_BinarySearchResult result = { 0, false };
+SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context) {
+   SdSearchResult result = { 0, false };
    int first = 0;
    int last = SdList_Count(list) - 1;
    int pivot = (first + last) / 2;
 
    while (first <= last) {
-      SdList_r pivot_item = SdValue_GetList(SdList_GetAt(list, pivot));
-      SdString_r pivot_name = SdValue_GetString(SdList_GetAt(pivot_item, 1));
-      int compare = SdString_Compare(pivot_name, search_name);
+      int compare = compare_func(SdList_GetAt(list, pivot), context);
 
       if (compare < 0) { /* pivot_name < search_name */
          first = pivot + 1;
@@ -437,18 +431,55 @@ SdEnv_BinarySearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r sear
    return result;
 }
 
-/* list is (list (list <unrelated> name1:str ...) (list <unrelated> name2:str ...) ...)
-   The objects are sorted by name. Returns true if the item was inserted, false if the name already exists. */
-bool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
-   SdString_r item_name = SdValue_GetString(SdList_GetAt(SdValue_GetList(item), 1));
-   SdEnv_BinarySearchResult result = SdEnv_BinarySearchByName(list, item_name);
+bool SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context) {
+   SdSearchResult result = SdList_Search(list, compare_func, context);
 
    if (result.exact) { /* An item with this name already exists. */
-      return false; 
+      return false;
    } else {
       SdList_InsertAt(list, result.index, item);
       return true;
    }
+}
+
+
+/* SdEnv *************************************************************************************************************/
+typedef struct SdValueListNode_s {
+   SdValue* value;
+   struct SdValueListNode_s* next;
+} SdValueListNode;
+
+struct SdEnv_s {
+   SdValue_r root; /* contains all living/connected objects */
+   SdValueListNode* values_list; /* contains all objects that haven't been deleted yet */
+};
+
+/*static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);*/
+static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
+static bool SdEnv_InsertByName(SdList_r list, SdValue_r item);
+static void SdEnv_CollectGarbage_FindConnectedValues(SdValue_r root, SdValueSet_r connected_values);
+
+/* list is (list (list <unrelated> name1:str ...) (list <unrelated> name2:str ...) ...) 
+The objects are sorted by name.  If an exact match is found, then its index is returned.  Otherwise the next highest 
+match is returned.  The index may be one past the end of the list indicating that the search_name is higher than any 
+name in the list. */
+/*SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r search_name) {
+   return SdList_Search(list, SdEnv_BinarySearchByName_CompareFunc, search_name);
+}*/
+
+/* Assume lhs is a list, and compare by the string at index 1 (the name). */
+static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context) {
+   SdString_r search_name = context;
+   SdList_r pivot_item = SdValue_GetList(lhs);
+   SdString_r pivot_name = SdValue_GetString(SdList_GetAt(pivot_item, 1));
+   return SdString_Compare(pivot_name, search_name);
+}
+
+/* list is (list (list <unrelated> name1:str ...) (list <unrelated> name2:str ...) ...)
+   The objects are sorted by name. Returns true if the item was inserted, false if the name already exists. */
+bool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
+   SdString_r item_name = SdValue_GetString(SdList_GetAt(SdValue_GetList(item), 1));
+   return SdList_InsertBySearch(list, item, SdEnv_BinarySearchByName_CompareFunc, item_name);
 }
 
 SdEnv* SdEnv_New(void) {
@@ -472,26 +503,31 @@ SdValue_r SdEnv_Root(SdEnv_r self) {
    return self->root;
 }
 
-void SdEnv_AddToGc(SdEnv* self, SdValue* value) {
+SdValue_r SdEnv_AddToGc(SdEnv* self, SdValue* value) {
+   SdValueListNode* new_node;
+
    assert(self);
    assert(value);
-   SdValueListNode* new_node = SdAlloc(sizeof(SdValueListNode));
+   new_node = SdAlloc(sizeof(SdValueListNode));
    new_node->value = value;
    new_node->next = self->values_list;
    self->values_list = new_node;
+   return value;
 }
 
 SdResult SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node) {
+   SdResult result;
+   SdList_r root_functions, root_statements, new_functions, new_statements;
+   size_t new_functions_count, new_statements_count, i;
+
    assert(self);
    assert(program_node);
-   SdResult result;
-   SdList_r root_functions = SdEnv_Root_Functions(self->root);
-   SdList_r root_statements = SdEnv_Root_Statements(self->root);
-   SdList_r new_functions = SdAst_Program_Functions(program_node);
-   size_t new_functions_count = SdList_Count(new_functions);
-   SdList_r new_statements = SdAst_Program_Statements(program_node);
-   size_t new_statements_count = SdList_Count(new_statements);
-   size_t i;
+   root_functions = SdEnv_Root_Functions(self->root);
+   root_statements = SdEnv_Root_Statements(self->root);
+   new_functions = SdAst_Program_Functions(program_node);
+   new_functions_count = SdList_Count(new_functions);
+   new_statements = SdAst_Program_Statements(program_node);
+   new_statements_count = SdList_Count(new_statements);
 
    for (i = 0; i < new_functions_count; i++) {
       SdValue_r new_function = SdList_GetAt(new_functions, i);
@@ -513,10 +549,90 @@ SdResult SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node) {
    return SdSuccess();
 }
 
-SdValue_r SdEnv_Root_New(SdEnv_r env) {
+void SdEnv_CollectGarbage(SdEnv_r self) {
+   SdValueSet* connected_values;
+   SdValueListNode* prev_value_node;
+   SdValueListNode* value_node;
+
+   assert(self);
+   connected_values = SdValueSet_New();
+   prev_value_node = NULL;
+   value_node = self->values_list;
+   
+   /* mark */
+   SdEnv_CollectGarbage_FindConnectedValues(self->root, connected_values);
+
+   /* sweep */
+   while (value_node) {
+      SdValueListNode* next = value_node->next;
+      if (SdValueSet_Has(connected_values, value_node->value)) { 
+         /* this value is connected */
+         prev_value_node = value_node;
+      } else { 
+         /* this value is garbage */
+         SdValue_Delete(value_node->value);
+         SdFree(value_node);
+         if (prev_value_node) {
+            prev_value_node->next = next;
+         } else {
+            self->values_list = next;
+         }
+      }
+      value_node = next;
+   }
+}
+
+void SdEnv_CollectGarbage_FindConnectedValues(SdValue_r root, SdValueSet_r connected_values) {
+   if (!root || !SdValueSet_Add(connected_values, root)) {
+      return;
+   }
+   if (SdValue_Type(root) == SdType_LIST) {
+      SdList_r list = SdValue_GetList(root);
+      size_t i, count = SdList_Count(list);
+      for (i = 0; i < count; i++) {
+         SdValue_r child = SdList_GetAt(list, i);
+         SdEnv_CollectGarbage_FindConnectedValues(child, connected_values);
+      }
+   }
+}
+
+SdValue_r SdEnv_BoxNil(SdEnv_r env) {
    assert(env);
-   SdValue_r frame = SdEnv_Frame_New(env, NULL);
-   SdList* root_list = SdList_New();
+   return SdEnv_AddToGc(env, SdValue_NewNil());
+}
+
+SdValue_r SdEnv_BoxInt(SdEnv_r env, int x) {
+   assert(env);
+   return SdEnv_AddToGc(env, SdValue_NewInt(x));
+}
+
+SdValue_r SdEnv_BoxDouble(SdEnv_r env, double x) {
+   assert(env);
+   return SdEnv_AddToGc(env, SdValue_NewDouble(x));
+}
+
+SdValue_r SdEnv_BoxBool(SdEnv_r env, bool x) {
+   assert(env);
+   return SdEnv_AddToGc(env, SdValue_NewBool(x));
+}
+
+SdValue_r SdEnv_BoxString(SdEnv_r env, SdString* x) {
+   assert(env);
+   return SdEnv_AddToGc(env, SdValue_NewString(x));
+}
+
+SdValue_r SdEnv_BoxList(SdEnv_r env, SdList* x) {
+   assert(env);
+   return SdEnv_AddToGc(env, SdValue_NewList(x));
+}
+
+SdValue_r SdEnv_Root_New(SdEnv_r env) {
+   SdValue_r frame;
+   SdList* root_list;
+
+   assert(env);
+   frame = SdEnv_Frame_New(env, NULL);
+   root_list = SdList_New();
    SdList_Append(root_list, SdEnv_BoxInt(env, SdNodeType_ROOT));
    SdList_Append(root_list, SdEnv_BoxList(env, SdList_New())); /* functions */
    SdList_Append(root_list, SdEnv_BoxList(env, SdList_New())); /* statements */
@@ -534,8 +650,8 @@ static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], int num_values);
    SdValue_r values[SdAst_MAX_NODE_VALUES]; \
    int i = 0; \
    values[i++] = SdEnv_BoxInt(env, node_type);
-#define SdAst_VALUE(value) \
-   values[i++] = value;
+#define SdAst_VALUE(x) \
+   values[i++] = x;
 #define SdAst_INT(x) \
    values[i++] = SdEnv_BoxInt(env, x);
 #define SdAst_DOUBLE(x) \
@@ -584,10 +700,12 @@ SdNodeType SdAst_NodeType(SdValue_r node) {
 }
 
 SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], int num_values) {
+   SdList* node;
+   int i;
+
    assert(env);
    assert(values);
-   SdList* node = SdList_New();
-   int i;
+   node = SdList_New();
    for (i = 0; i < num_values; i++) {
       assert(values[i]);
       SdList_Append(node, values[i]);
@@ -826,3 +944,79 @@ SdValue_r SdAst_QueryPred_New(SdEnv_r env, SdString* parameter_name, SdValue_r e
 }
 SdAst_STRING_GETTER(SdAst_QueryPred_ParameterName, SdNodeType_QUERY_PRED, 1)
 SdAst_VALUE_GETTER(SdAst_QueryPred_Expr, SdNodeType_QUERY_PRED, 2)
+
+/* These are SdEnv nodes "above" the AST, but it's convenient to use the same macros to implement them. */
+SdAst_LIST_GETTER(SdEnv_Root_Functions, SdNodeType_ROOT, 1)
+SdAst_LIST_GETTER(SdEnv_Root_Statements, SdNodeType_ROOT, 2)
+SdAst_VALUE_GETTER(SdEnv_Root_TopFrame, SdNodeType_ROOT, 3)
+
+SdValue_r SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null) {
+   SdAst_BEGIN(SdNodeType_FRAME)
+   if (parent_or_null) {
+      SdAst_VALUE(parent_or_null)
+   } else {
+      SdAst_NIL()
+   }
+   SdAst_LIST(SdList_New()) /* variable slots list */
+   SdAst_END
+}
+SdAst_VALUE_GETTER(SdEnv_Frame_Parent, SdNodeType_FRAME, 1)
+SdAst_LIST_GETTER(SdEnv_Frame_VariableSlots, SdNodeType_FRAME, 2)
+
+SdValue_r SdEnv_VariableSlot_New(SdEnv_r env, SdString_r name, SdValue_r value) {
+   SdAst_BEGIN(SdNodeType_VAR_SLOT)
+   SdAst_STRING(name)
+   SdAst_VALUE(value)
+   SdAst_END
+}
+SdAst_STRING_GETTER(SdEnv_VariableSlot_Name, SdNodeType_VAR_SLOT, 1)
+SdAst_VALUE_GETTER(SdEnv_VariableSlot_Value, SdNodeType_VAR_SLOT, 2)
+
+/* SdValueSet ********************************************************************************************************/
+struct SdValueSet_s {
+   SdList* list; /* elements arse sorted by pointer value */
+};
+
+static int SdValueSet_CompareFunc(SdValue_r lhs, void* context);
+
+SdValueSet* SdValueSet_New(void) {
+   SdValueSet* self = SdAlloc(sizeof(SdValueSet));
+   self->list = SdList_New();
+   return self;
+}
+
+void SdValueSet_Delete(SdValueSet* self) {
+   assert(self);
+   SdFree(self->list);
+   SdFree(self);
+}
+
+int SdValueSet_CompareFunc(SdValue_r lhs, void* context) { /* compare the pointer values */
+   SdValue_r rhs;
+
+   assert(lhs);
+   assert(context);
+   rhs = context;
+   if (lhs < rhs) {
+      return -1;
+   } else if (lhs > rhs) {
+      return 1;
+   } else {
+      return 0;
+   }
+}
+
+bool SdValueSet_Add(SdValueSet_r self, SdValue_r item) { /* true = added, false = already exists */
+   assert(self);
+   assert(item);
+   return SdList_InsertBySearch(self->list, item, SdValueSet_CompareFunc, item);
+}
+
+bool SdValueSet_Has(SdValueSet_r self, SdValue_r item) {
+   SdSearchResult result;
+
+   assert(self);
+   assert(item);
+   result = SdList_Search(self->list, SdValueSet_CompareFunc, item);
+   return result.exact;
+}

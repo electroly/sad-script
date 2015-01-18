@@ -30,7 +30,29 @@
 
 #ifdef _MSC_VER
 #pragma warning(pop) /* start showing warnings again */
+#pragma warning(push)
+#pragma warning(disable: 4820) /* '4' bytes padding added after data member '...' */
 #endif
+
+/* Raw pointer: ownership is being transferred.
+_r suffix: a pointer is being borrowed, but ownership is not transferred. */
+typedef struct SdResult_s SdResult;
+typedef struct Sad_s Sad;
+typedef struct Sad_s* Sad_r;
+typedef struct SdString_s SdString;
+typedef struct SdString_s* SdString_r;
+typedef struct SdStringBuf_s SdStringBuf;
+typedef struct SdStringBuf_s* SdStringBuf_r;
+typedef struct SdValue_s SdValue;
+typedef struct SdValue_s* SdValue_r;
+typedef struct SdList_s SdList;
+typedef struct SdList_s* SdList_r;
+typedef struct SdEnv_s SdEnv;
+typedef struct SdEnv_s* SdEnv_r;
+typedef struct SdCallStack_s SdCallStack;
+typedef struct SdCallStack_s* SdCallStack_r;
+typedef struct SdValueSet_s SdValueSet;
+typedef struct SdValueSet_s* SdValueSet_r;
 
 typedef enum SdErr_e {
    SdErr_SUCCESS = 1,
@@ -50,6 +72,8 @@ typedef enum SdType_e {
 typedef enum SdNodeType_e {
    /* Environment */
    SdNodeType_ROOT,
+   SdNodeType_FRAME,
+   SdNodeType_VAR_SLOT,
 
    /* AST */
    SdNodeType_PROGRAM,
@@ -84,23 +108,12 @@ typedef enum SdNodeType_e {
    SdNodeType_QUERY_PRED
 } SdNodeType;
 
-/* Raw pointer: ownership is being transferred.
-   _r suffix: a pointer is being borrowed, but ownership is not transferred. */ 
-typedef struct SdResult_s SdResult;
-typedef struct Sad_s Sad;
-typedef struct Sad_s* Sad_r;
-typedef struct SdString_s SdString;
-typedef struct SdString_s* SdString_r;
-typedef struct SdStringBuf_s SdStringBuf;
-typedef struct SdStringBuf_s* SdStringBuf_r; 
-typedef struct SdValue_s SdValue;
-typedef struct SdValue_s* SdValue_r;
-typedef struct SdList_s SdList;
-typedef struct SdList_s* SdList_r;
-typedef struct SdEnv_s SdEnv;
-typedef struct SdEnv_s* SdEnv_r;
-typedef struct SdCallStack_s SdCallStack;
-typedef struct SdCallStack_s* SdCallStack_r;
+typedef struct SdSearchResult_s {
+   int index; /* could be one past the end of the list if search name > everything */
+   bool exact; /* true = index is an exact match, false = index is the next highest match */
+} SdSearchResult;
+
+typedef int(*SdSearchCompareFunc)(SdValue_r lhs, void* context);
 
 /* Sad ***************************************************************************************************************/
 Sad*           Sad_New(void);
@@ -161,6 +174,8 @@ SdValue_r      SdList_GetAt(SdList_r self, size_t index);
 size_t         SdList_Count(SdList_r self);
 SdValue_r      SdList_RemoveAt(SdList_r self, size_t index);
 void           SdList_Clear(SdList_r self);
+SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context); /* list must be sorted */
+bool           SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context);
 
 /* SdEnv *************************************************************************************************************/
 /*
@@ -178,7 +193,7 @@ void           SdList_Clear(SdList_r self);
 SdEnv*         SdEnv_New(void);
 void           SdEnv_Delete(SdEnv* self);
 SdValue_r      SdEnv_Root(SdEnv_r self);
-void           SdEnv_AddToGc(SdEnv_r self, SdValue* value);
+SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
 SdResult       SdEnv_ExecuteTopLevelStatements(SdEnv_r self);
 SdResult       SdEnv_CallFunction(SdEnv_r self, SdString_r function_name, SdList_r arguments);
@@ -208,7 +223,6 @@ SdList_r       SdEnv_Frame_VariableSlots(SdValue_r self);
 SdValue_r      SdEnv_VariableSlot_New(SdEnv_r env, SdString_r name, SdValue_r value);
 SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
 SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
-
 
 /* SdAst *************************************************************************************************************/
 /*
@@ -355,5 +369,15 @@ SdValue_r      SdAst_QueryStep_Predicate(SdValue_r self); /* may be null */
 SdValue_r      SdAst_QueryPred_New(SdEnv_r env, SdString* parameter_name, SdValue_r expr);
 SdString_r     SdAst_QueryPred_ParameterName(SdValue_r self);
 SdValue_r      SdAst_QueryPred_Expr(SdValue_r self);
+
+/* SdValueSet ********************************************************************************************************/
+SdValueSet*    SdValueSet_New(void);
+void           SdValueSet_Delete(SdValueSet* self);
+bool           SdValueSet_Add(SdValueSet_r self, SdValue_r item); /* true = added, false = already exists */
+bool           SdValueSet_Has(SdValueSet_r self, SdValue_r item);
+
+#ifdef _MSC_VER
+#pragma warning(pop) /* our disabled warnings won't affect files that #include this header */
+#endif
 
 #endif /* _SAD_BASIC_H_ */
