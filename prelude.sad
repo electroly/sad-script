@@ -1,0 +1,295 @@
+// SAD-Script
+// Copyright (c) 2015, Brian Luft.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+// following conditions are met:
+//
+// - Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+// disclaimer.
+// - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+// following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+// USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+intrinsic function + a b {}
+intrinsic function - a b {}
+intrinsic function / a b {}
+intrinsic function * a b {}
+intrinsic function % a b {}
+intrinsic function ^ a b {}
+intrinsic function type-of x {}
+intrinsic function && a b {}
+intrinsic function || a b {}
+intrinsic function << a b {}
+intrinsic function >> a b {}
+intrinsic function list.count self {}
+intrinsic function list.get-at self index {}
+intrinsic function list.set-at! self index value {}
+intrinsic function list.insert-at! self index value {}
+intrinsic function list.remove-at! self index {}
+intrinsic function string.eq? a b {}
+intrinsic function string.hash self {}
+intrinsic function string.append! self suffix {}
+intrinsic function int.eq? a b {}
+intrinsic function bool.eq? a b {}
+intrinsic function double.eq? a b {}
+intrinsic function double.hash self {}
+
+// Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function nil? self {
+   return [(type-of self) int.eq? TYPE-NIL]
+}
+
+function zero? self {
+   return [[(type-of self) int.eq? TYPE-INT] && [self int.eq? 0]]
+}
+
+function true? self {
+   return [[(type-of self) int.eq? TYPE-BOOL] && [self bool.eq? true]]
+}
+
+function false? self {
+   return [[(type-of self) int.eq? TYPE-BOOL] && [self bool.eq? false]]
+}
+
+function list.eq? a b {
+   if (not [(count a) int.eq? (count b)]) {
+      return false
+   } else {
+      foreach a-item at i in a {
+         var b-item = [b @ i]
+         if (not [a-item = b-item]) {
+            return false
+         }
+      }
+      return true
+   }
+}
+
+function list.append! self value {
+   var index = [[self list.count] - 1]
+   [self list.insert-at! index value]
+}
+
+function int.hash self {
+   return self
+}
+
+function list.hash self {
+   var value = 0
+   foreach x at i in self {
+      set value = [value ^ [(hash x) * [i + 1]]
+   }
+   return value
+}
+
+function bool.hash self {
+   if [a bool.eq? b] {
+      return 1
+   } else {
+      return 0
+   }
+}
+
+function = a b {
+   var a-type = (type-of a)
+   var b-type = (type-of b)
+   if (not [a-type int.eq? b-type]) {
+      return false
+   }
+   switch a-type {
+      case TYPE-INT {
+         return [a int.eq? b]
+      }
+      case TYPE-DOUBLE {
+         return [a double.eq? b]
+      }
+      case TYPE-BOOL {
+         return [a bool.eq? b]
+      }
+      case TYPE-STRING {
+         return [a string.eq? b]
+      }
+      case TYPE-LIST {
+         return [a list.eq? b]
+      }
+      default {
+         throw "Unknown type ID."
+      }
+   }
+}
+
+function hash self {
+   switch (type-of self) {
+      case TYPE-INT {
+         return [self int.hash]
+      }
+      case TYPE-DOUBLE {
+         return [self double.hash]
+      }
+      case TYPE-BOOL {
+         return [self bool.hash]
+      }
+      case TYPE-STRING {
+         return [self string.hash]
+      }
+      case TYPE-LIST {
+         return [self list.hash]
+      }
+      default {
+         throw "Unknown type ID."
+      }
+   }
+}
+
+function += collection item {
+   [collection list.append! item]
+}
+
+function @ collection index {
+   return [collection list.get-at index]
+}
+
+function @= collection index value {
+   [collection list.set-at! index value]
+}
+
+// Queries ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function reverse list {
+   var new-list = (list)
+   var last-index = [(count list) - 1]
+   for i = 0 to last-index {
+      [new-list += [list @ [last-index - i]]]
+   }
+   return new-list
+}
+
+function where list func {
+   var new-list = (list)
+   foreach x in list {
+      if (true? (func x)) {
+         [new-list += x]
+      }
+   }
+   return new-list
+}
+
+function select list func {
+   var new-list = (list)
+   foreach x in list {
+      [new-list += (func x)]
+   }
+   return new-list
+}
+
+function any list {
+   return [(count list) > 0]
+}
+
+// dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Structure:
+// A list of buckets, where the index into the list equals [hash % number-of-buckets]
+// Each bucket is a list of pairs.
+// Each pair is a two-element list: (list key value)
+
+var DICT-BUCKET-COUNT = 37
+
+function dict {
+   var x = (list)
+   for i = 1 to DICT_BUCKET_COUNT {
+      [x += nil]
+   }
+   return x
+}
+
+// returns nil if the key does not exist in the dict.
+function dict.get self key {
+   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
+   var bucket = [self @ bucket-index]
+   if [bucket nil?] {
+      return nil
+   } else {
+      foreach pair in bucket {
+         var pair-key = [pair @ 0]
+         if [pair-key = key] {
+            return [pair @ 1]
+         }
+      }
+      return nil
+   }
+}
+
+// returns true if a value was overwritten, false if not.
+function dict.set! self key value {
+   var new-pair = (list key value)
+   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
+   var bucket = [self @ bucket-index]
+   if [bucket nil?] {
+      set bucket = (list new-pair)
+      [self @= bucket-index bucket]
+   } else {
+      // If the key already exists then overwrite it.
+      foreach pair at i in bucket {
+         if [[pair @ 0] = key] {
+            [bucket @= i new-pair]
+            return true
+         }
+      }
+      [bucket += new-pair]
+   }
+   return false
+}
+
+function dict.remove! self key {
+   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
+   var bucket = [self @ bucket-index]
+   if (not [bucket nil?]) {
+      foreach pair at i in bucket {
+         if [[pair @ 0] = key] {
+            [bucket list.remove-at! i]
+            return true
+         }
+      }
+   }
+   return false
+}
+
+// hashset ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Structure: 
+// A dict where all the values are ignored (but happen to be set to true)
+
+function hashset {
+   return (dict)
+}
+
+function hashset-add self key {
+   return [self dict.set! key true]
+}
+
+function hashset-has? self key {
+   return (true? [self dict.get key])
+}
+
+function hashset-remove self key {
+   [self dict.remove! key]
+}
+
+// Globals ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var TYPE-NIL = 0
+var TYPE-INT = 1
+var TYPE-DOUBLE = 2
+var TYPE-BOOL = 3
+var TYPE-STRING = 4
+var TYPE-LIST = 5

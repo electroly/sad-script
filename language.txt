@@ -1,0 +1,45 @@
+// SAD-Script: S-Expressions and Dashes
+
+<expression> ::= <literal> | <call> | <infix-call> | <identifier> | <query>
+
+<identifier> ::= anything but: space | ( ) { } :
+<literal> ::= <integer-literal> | <real-literal> | <boolean-literal> | <string-literal> | "nil"
+<integer-literal> ::= [0-9]+
+<real-literal> ::= [0-9]+.[0-9]+
+<boolean-literal> ::= "true" | "false"
+<string-literal> ::= "like this"
+
+<label> ::= <identifier> ":"
+
+<call> ::= "(" <identifier> <identifier>* ")"
+
+<infix-call> ::= "[" <expression> <identifier> <expression> "]"
+
+<query> ::= "(|" <expression> ("|" <query-step>)+ "|)"
+<query-step> ::= <identifier> <expression>* (<label> <expression>)?
+
+<program> ::= <function>* <statement>*
+
+<statement> ::= <call> | <infix-call> | <var> | <set> | <if> | <for> | <for-each> | <while> | <do> | <switch> | <return> | <throw>
+<body> ::= "{" <statement>* "}"
+
+<function> ::= "function" <identifier> <identifier>* <body>
+
+<var> ::= "var" <identifier> "=" <expression>
+<set> ::= "set" <identifier> "=" <expression>
+
+<if> ::= "if" <expression> <body> ("elseif" <expression> <body>)* ("else" <body>)?
+
+<for> ::= "for" <identifier> "=" <expression> "to" <expression> <body>
+
+<foreach> ::= "foreach" <identifier> ("at" <identifier>)? "in" <expression> <body>
+
+<while> ::= "while" <expression> <body>
+
+<do> ::= "do" <body> "while" <expression>
+
+<switch> ::= "switch" <expression> "{" ("case" <expression> <body>)+ ("default" <body>)? "}"
+
+<return> ::= "return" <expression>
+
+<throw> ::= "throw" <expression>
