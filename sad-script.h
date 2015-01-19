@@ -53,6 +53,14 @@ typedef struct SdCallStack_s SdCallStack;
 typedef struct SdCallStack_s* SdCallStack_r;
 typedef struct SdValueSet_s SdValueSet;
 typedef struct SdValueSet_s* SdValueSet_r;
+typedef struct SdChain_s SdChain;
+typedef struct SdChain_s* SdChain_r;
+typedef struct SdChainNode_s SdChainNode;
+typedef struct SdChainNode_s* SdChainNode_r;
+typedef struct SdToken_s SdToken;
+typedef struct SdToken_s* SdToken_r;
+typedef struct SdScanner_s SdScanner;
+typedef struct SdScanner_s* SdScanner_r;
 
 typedef enum SdErr_e {
    SdErr_SUCCESS = 1,
@@ -68,6 +76,37 @@ typedef enum SdType_e {
    SdType_STRING = 4,
    SdType_LIST = 5
 } SdType;
+
+typedef enum SdTokenType_e {
+   SdTokenType_INT_LIT,
+   SdTokenType_DOUBLE_LIT,
+   SdTokenType_BOOL_LIT,
+   SdTokenType_STRING_LIT,
+   SdTokenType_OPEN_PAREN,
+   SdTokenType_CLOSE_PAREN,
+   SdTokenType_OPEN_BRACKET,
+   SdTokenType_CLOSE_BRACKET,
+   SdTokenType_OPEN_BRACE,
+   SdTokenType_CLOSE_BRACE,
+   SdTokenType_PIPE,
+   SdTokenType_COLON,
+   SdTokenType_IDENTIFIER,
+   SdTokenType_FUNCTION,
+   SdTokenType_VAR,
+   SdTokenType_SET,
+   SdTokenType_IF,
+   SdTokenType_FOR,
+   SdTokenType_FOREACH,
+   SdTokenType_AT,
+   SdTokenType_IN,
+   SdTokenType_WHILE,
+   SdTokenType_DO,
+   SdTokenType_SWITCH,
+   SdTokenType_CASE,
+   SdTokenType_DEFAULT,
+   SdTokenType_RETURN,
+   SdTokenType_DIE
+} SdTokenType;
 
 typedef enum SdNodeType_e {
    /* Environment */
@@ -146,8 +185,11 @@ SdStringBuf*   SdStringBuf_New(void);
 void           SdStringBuf_Delete(SdStringBuf* self);
 void           SdStringBuf_AppendString(SdStringBuf_r self, SdString_r suffix);
 void           SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix);
+void           SdStringBuf_AppendChar(SdStringBuf_r self, char ch);
 void           SdStringBuf_AppendInt(SdStringBuf_r self, int number);
 const char*    SdStringBuf_CStr(SdStringBuf_r self);
+void           SdStringBuf_Clear(SdStringBuf_r self);
+int            SdStringBuf_Length(SdStringBuf_r self);
 
 /* SdValue ***********************************************************************************************************/
 SdValue*       SdValue_NewNil(void);
@@ -181,10 +223,10 @@ bool           SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchComp
 /*
    Environment structure:
    Root: 
-      (list ROOT (list Function ...) (list Statement ...) top:StackFrame)
+      (list ROOT (list Function ...) (list Statement ...) top:StackFrame bottom:StackFrame)
                   ^-- sorted by name
-   StackFrame:
-      (list FRAME parent:StackFrame? (list VariableSlot ...))
+   Frame:
+      (list FRAME parent:Frame? (list VariableSlot ...) is-function:Bool)
                                       ^-- sorted by name
    VariableSlot:
       (list VAR_SLOT name:Str payload:Value)
@@ -197,7 +239,6 @@ SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
 SdResult       SdEnv_ExecuteTopLevelStatements(SdEnv_r self);
 SdResult       SdEnv_CallFunction(SdEnv_r self, SdString_r function_name, SdList_r arguments);
-SdValue_r      SdEnv_GetGlobalVariable(SdEnv_r self, SdString_r variable_name); /* may return null */
 void           SdEnv_CollectGarbage(SdEnv_r self);
 void           SdEnv_PushFrame(SdEnv_r self);
 void           SdEnv_PopFrame(SdEnv_r self);
@@ -214,11 +255,13 @@ SdValue_r      SdEnv_BoxList(SdEnv_r env, SdList* x);
 SdValue_r      SdEnv_Root_New(SdEnv_r env);
 SdList_r       SdEnv_Root_Functions(SdValue_r self);
 SdList_r       SdEnv_Root_Statements(SdValue_r self);
-SdValue_r      SdEnv_Root_TopFrame(SdValue_r self); /* may be null */
+SdValue_r      SdEnv_Root_TopFrame(SdValue_r self);
+SdValue_r      SdEnv_Root_BottomFrame(SdValue_r self);
 
-SdValue_r      SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null);
+SdValue_r      SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null, bool is_function);
 SdValue_r      SdEnv_Frame_Parent(SdValue_r self); /* may be null */
 SdList_r       SdEnv_Frame_VariableSlots(SdValue_r self);
+bool           SdEnv_Frame_IsFunction(SdValue_r self);
 
 SdValue_r      SdEnv_VariableSlot_New(SdEnv_r env, SdString_r name, SdValue_r value);
 SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
@@ -375,6 +418,33 @@ SdValueSet*    SdValueSet_New(void);
 void           SdValueSet_Delete(SdValueSet* self);
 bool           SdValueSet_Add(SdValueSet_r self, SdValue_r item); /* true = added, false = already exists */
 bool           SdValueSet_Has(SdValueSet_r self, SdValue_r item);
+
+/* SdChain ***********************************************************************************************************/
+SdChain*       SdChain_New(void);
+void           SdChain_Delete(SdChain* self);
+size_t         SdChain_Count(SdChain_r self);
+void           SdChain_Push(SdChain_r self, SdValue_r item);
+SdValue_r      SdChain_Pop(SdChain_r self); /* may be null if the list is empty */
+SdChainNode_r  SdChain_Head(SdChain_r self); /* may be null if the list is empty */
+void           SdChain_Remove(SdChain_r self, SdChainNode_r node);
+
+SdValue_r      SdChainNode_Value(SdChainNode_r self);
+SdChainNode_r  SdChainNode_Prev(SdChainNode_r self); /* null for the head node */
+SdChainNode_r  SdChainNode_Next(SdChainNode_r self); /* null for the tail node */
+
+/* SdToken ***********************************************************************************************************/
+SdToken*       SdToken_New(int source_line, SdTokenType type, char* text);
+void           SdToken_Delete(SdToken* self);
+int            SdToken_SourceLine(SdToken_r self);
+SdTokenType    SdToken_Type(SdToken_r self);
+const char*    SdToken_Text(SdToken_r self);
+
+/* SdScanner *********************************************************************************************************/
+SdScanner*     SdScanner_New(void);
+void           SdScanner_Delete(SdScanner* self);
+void           SdScanner_Tokenize(SdScanner_r self, const char* text);
+bool           SdScanner_PeekToken(SdScanner_r self, SdToken** out_token); /* true = token was read, false = eof */
+bool           SdScanner_NextToken(SdScanner_r self, SdToken** out_token); /* true = token was read, false = eof */
 
 #ifdef _MSC_VER
 #pragma warning(pop) /* our disabled warnings won't affect files that #include this header */

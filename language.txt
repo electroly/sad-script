@@ -15,7 +15,7 @@
 
 <infix-call> ::= "[" <expression> <identifier> <expression> "]"
 
-<query> ::= "(|" <expression> ("|" <query-step>)+ "|)"
+<query> ::= "(" "|" <expression> ("|" <query-step>)+ "|" ")"
 <query-step> ::= <identifier> <expression>* (<label> <expression>)?
 
 <program> ::= <function>* <statement>*
@@ -42,4 +42,35 @@
 
 <return> ::= "return" <expression>
 
-<throw> ::= "throw" <expression>
+<throw> ::= "die" <expression>
+
+
+// Token types:
+INT_LIT
+DOUBLE_LIT
+BOOL_LIT
+STRING_LIT
+OPEN_PAREN
+CLOSE_PAREN
+OPEN_BRACKET
+CLOSE_BRACKET
+OPEN_BRACE
+CLOSE_BRACE
+PIPE
+COLON
+IDENTIFIER
+FUNCTION
+VAR
+SET
+IF
+FOR
+FOREACH
+AT
+IN
+WHILE
+DO
+SWITCH
+CASE
+DEFAULT
+RETURN
+DIE
