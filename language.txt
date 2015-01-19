@@ -1,51 +1,29 @@
 // SAD-Script: S-Expressions and Dashes
 
-<expression> ::= <literal> | <call> | <infix-call> | <identifier> | <query>
+// non-terminals
+<program> ::= (<function> | <statement>)*
+<function> ::= INTRINSIC? FUNCTION (IDENTIFIER | EQUAL) IDENTIFIER* <body>
+<body> ::= OPEN_BRACE <statement>* CLOSE_BRACE
+<expression> ::= INT_LIT | DOUBLE_LIT | BOOL_LIT | STRING_LIT | NIL | <call> | <infix-call> | IDENTIFIER | <query>
+<call> ::= OPEN_PAREN IDENTIFIER IDENTIFIER* CLOSE_PAREN
+<infix-call> ::= OPEN_BRACKET <expression> IDENTIFIER <expression> CLOSE_BRACKET
+<query> ::= OPEN_PAREN PIPE <expression> <query-step>* PIPE CLOSE_PAREN
+<query-step> ::= ARROW IDENTIFIER <expression>* <query-pred>?
+<query-pred> ::= COLON IDENTIFIER <expression>
+<statement> ::= 
+   <call> | <infix-call> | <var> | <set> | <if> | <for> | <for-each> | <while> | <do> | <switch> | <return> | <die>
+<var> ::= VAR IDENTIFIER EQUAL <expression>
+<set> ::= SET IDENTIFIER EQUAL <expression>
+<if> ::= IF <expression> <body> (ELSEIF <expression> <body>)* (ELSE <body>)?
+<for> ::= FOR IDENTIFIER EQUAL <expression> TO <expression> <body>
+<foreach> ::= FOREACH IDENTIFIER (AT IDENTIFIER)? IN <expression> <body>
+<while> ::= WHILE <expression> <body>
+<do> ::= DO <body> WHILE <expression>
+<switch> ::= SWITCH <expression> OPEN_BRACE (CASE <expression> <body>)* (DEFAULT <body>)? CLOSE_BRACE
+<return> ::= RETURN <expression>
+<die> ::= DIE <expression>
 
-<identifier> ::= anything but: space | ( ) { } :
-<literal> ::= <integer-literal> | <real-literal> | <boolean-literal> | <string-literal> | "nil"
-<integer-literal> ::= [0-9]+
-<real-literal> ::= [0-9]+.[0-9]+
-<boolean-literal> ::= "true" | "false"
-<string-literal> ::= "like this"
-
-<label> ::= <identifier> ":"
-
-<call> ::= "(" <identifier> <identifier>* ")"
-
-<infix-call> ::= "[" <expression> <identifier> <expression> "]"
-
-<query> ::= "(" "|" <expression> ("|" <query-step>)+ "|" ")"
-<query-step> ::= <identifier> <expression>* (<label> <expression>)?
-
-<program> ::= <function>* <statement>*
-
-<statement> ::= <call> | <infix-call> | <var> | <set> | <if> | <for> | <for-each> | <while> | <do> | <switch> | <return> | <throw>
-<body> ::= "{" <statement>* "}"
-
-<function> ::= "function" <identifier> <identifier>* <body>
-
-<var> ::= "var" <identifier> "=" <expression>
-<set> ::= "set" <identifier> "=" <expression>
-
-<if> ::= "if" <expression> <body> ("elseif" <expression> <body>)* ("else" <body>)?
-
-<for> ::= "for" <identifier> "=" <expression> "to" <expression> <body>
-
-<foreach> ::= "foreach" <identifier> ("at" <identifier>)? "in" <expression> <body>
-
-<while> ::= "while" <expression> <body>
-
-<do> ::= "do" <body> "while" <expression>
-
-<switch> ::= "switch" <expression> "{" ("case" <expression> <body>)+ ("default" <body>)? "}"
-
-<return> ::= "return" <expression>
-
-<throw> ::= "die" <expression>
-
-
-// Token types:
+// terminals
 INT_LIT
 DOUBLE_LIT
 BOOL_LIT
@@ -58,12 +36,16 @@ OPEN_BRACE
 CLOSE_BRACE
 PIPE
 COLON
+EQUAL
 IDENTIFIER
 FUNCTION
 VAR
 SET
 IF
+ELSE
+ELSEIF
 FOR
+TO
 FOREACH
 AT
 IN
@@ -74,3 +56,6 @@ CASE
 DEFAULT
 RETURN
 DIE
+INTRINSIC
+NIL
+ARROW

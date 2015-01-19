@@ -35,6 +35,7 @@
 
 #ifdef _MSC_VER
 #pragma warning(disable: 4820) /* '4' bytes padding added after data member '...' */
+#pragma warning(disable: 4127) /* conditional expression is constant */
 #endif
 
 /* Helpers ***********************************************************************************************************/
@@ -67,13 +68,7 @@ char* SdStrdup(const char* src) {
 }
 
 /* SdResult **********************************************************************************************************/
-SdResult SdSuccess(void) {
-   SdResult err;
-   memset(&err, 0, sizeof(err));
-   err.code = SdErr_SUCCESS;
-   err.message[0] = 0;
-   return err;
-}
+SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
 
 SdResult SdFail(SdErr code, const char* message) {
    SdResult err;
@@ -82,6 +77,10 @@ SdResult SdFail(SdErr code, const char* message) {
    strncpy(err.message, message, sizeof(err.message) - 1); 
       /* ok if strncpy doesn't add a null terminator; memset() above zeroed out the string. */
    return err;
+}
+
+bool SdFailed(SdResult result) {
+   return result.code != SdErr_SUCCESS;
 }
 
 /* SdString **********************************************************************************************************/
@@ -562,7 +561,7 @@ SdResult SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node) {
       SdList_Append(root_statements, new_statement);
    }
 
-   return SdSuccess();
+   return SdResult_SUCCESS;
 }
 
 void SdEnv_CollectGarbage(SdEnv_r self) {
@@ -785,14 +784,19 @@ SdValue_r SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* statements) 
 SdAst_LIST_GETTER(SdAst_Program_Functions, SdNodeType_PROGRAM, 1)
 SdAst_LIST_GETTER(SdAst_Program_Statements, SdNodeType_PROGRAM, 2)
 
-SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdValue_r body) {
+SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
+   bool is_intrinsic) {
    SdAst_BEGIN(SdNodeType_FUNCTION)
    SdAst_STRING(function_name)
+   SdAst_LIST(parameter_names)
    SdAst_VALUE(body)
+   SdAst_BOOL(is_intrinsic)
    SdAst_END
 }
 SdAst_STRING_GETTER(SdAst_Function_Name, SdNodeType_FUNCTION, 1)
 SdAst_VALUE_GETTER(SdAst_Function_Body, SdNodeType_FUNCTION, 2)
+SdAst_LIST_GETTER(SdAst_Function_ParameterNames, SdNodeType_FUNCTION, 3)
+SdAst_BOOL_GETTER(SdAst_Function_IsIntrinsic, SdNodeType_FUNCTION, 4)
 
 SdValue_r SdAst_Body_New(SdEnv_r env, SdList* statements) {
    SdAst_BEGIN(SdNodeType_BODY)
@@ -928,12 +932,12 @@ SdValue_r SdAst_Return_New(SdEnv_r env, SdValue_r expr) {
 }
 SdAst_VALUE_GETTER(SdAst_Return_Expr, SdNodeType_RETURN, 1)
 
-SdValue_r SdAst_Throw_New(SdEnv_r env, SdValue_r expr) {
-   SdAst_BEGIN(SdNodeType_THROW)
+SdValue_r SdAst_Die_New(SdEnv_r env, SdValue_r expr) {
+   SdAst_BEGIN(SdNodeType_DIE)
    SdAst_VALUE(expr)
    SdAst_END
 }
-SdAst_VALUE_GETTER(SdAst_Throw_Expr, SdNodeType_THROW, 1)
+SdAst_VALUE_GETTER(SdAst_Die_Expr, SdNodeType_DIE, 1)
 
 SdValue_r SdAst_IntLit_New(SdEnv_r env, int value) {
    SdAst_BEGIN(SdNodeType_INT_LIT)
@@ -1358,8 +1362,7 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
          case '[':
          case ']':
          case '|':
-         case ':':
-         {
+         case ':': {
             char token_text[2];
             token_text[0] = ch;
             token_text[1] = 0;
@@ -1410,6 +1413,7 @@ void SdScanner_AppendToken(SdScanner_r self, int source_line, const char* token_
 
 SdTokenType SdScanner_ClassifyToken(const char* text) {
    switch (text[0]) {
+      /* These characters are always tokens on their own, so we don't have to check the whole string. */
       case '"': return SdTokenType_STRING_LIT;
       case '(': return SdTokenType_OPEN_PAREN;
       case ')': return SdTokenType_CLOSE_PAREN;
@@ -1420,6 +1424,7 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
       case '|': return SdTokenType_PIPE;
       case ':': return SdTokenType_COLON;
 
+      /* For the rest, we use the first character to speed up the check, but we have to compare the whole string. */
       case 'a':
          if (strcmp(text, "at") == 0)
             return SdTokenType_AT;
@@ -1439,6 +1444,13 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
             return SdTokenType_DO;
          break;
 
+      case 'e':
+         if (strcmp(text, "else") == 0)
+            return SdTokenType_ELSE;
+         if (strcmp(text, "elseif") == 0)
+            return SdTokenType_ELSEIF;
+         break;
+
       case 'f':
          if (strcmp(text, "false") == 0)
             return SdTokenType_BOOL_LIT;
@@ -1455,6 +1467,13 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
             return SdTokenType_IF;
          if (strcmp(text, "in") == 0)
             return SdTokenType_IN;
+         if (strcmp(text, "intrinsic") == 0)
+            return SdTokenType_INTRINSIC;
+         break;
+
+      case 'n':
+         if (strcmp(text, "nil") == 0)
+            return SdTokenType_NIL;
          break;
 
       case 'r':
@@ -1470,6 +1489,8 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
          break;
 
       case 't':
+         if (strcmp(text, "to") == 0)
+            return SdTokenType_TO;
          if (strcmp(text, "true") == 0)
             return SdTokenType_BOOL_LIT;
          break;
@@ -1496,10 +1517,17 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
       case '9':
       case '-':
       case '.':
+         if (strcmp(text, "->") == 0)
+            return SdTokenType_ARROW;
          if (SdScanner_IsIntLit(text))
             return SdTokenType_INT_LIT;
          if (SdScanner_IsDoubleLit(text))
             return SdTokenType_DOUBLE_LIT;
+         break;
+
+      case '=':
+         if (strcmp(text, "=") == 0)
+            return SdTokenType_EQUAL;
          break;
    }
 
@@ -1542,7 +1570,12 @@ bool SdScanner_IsDoubleLit(const char* text) {
    return true;
 }
 
-bool SdScanner_PeekToken(SdScanner_r self, SdToken** out_token) { /* true = token was read, false = eof */
+bool SdScanner_IsEof(SdScanner_r self) {
+   assert(self);
+   return !self->cursor;
+}
+
+bool SdScanner_Peek(SdScanner_r self, SdToken_r* out_token) { /* true = token was read, false = eof */
    assert(self);
    assert(out_token);
    if (self->cursor) {
@@ -1553,7 +1586,16 @@ bool SdScanner_PeekToken(SdScanner_r self, SdToken** out_token) { /* true = toke
    }
 }
 
-bool SdScanner_NextToken(SdScanner_r self, SdToken** out_token) { /* true = token was read, false = eof */
+SdTokenType SdScanner_PeekType(SdScanner_r self) { /* SdTokenType_NONE if eof */
+   SdToken_r token;
+   if (!SdScanner_Peek(self, &token)) {
+      return SdTokenType_NONE;
+   } else {
+      return SdToken_Type(token);
+   }
+}
+
+bool SdScanner_Read(SdScanner_r self, SdToken_r* out_token) { /* true = token was read, false = eof */
    assert(self);
    assert(out_token);
    if (self->cursor) {
@@ -1563,4 +1605,741 @@ bool SdScanner_NextToken(SdScanner_r self, SdToken** out_token) { /* true = toke
    } else {
       return false;
    }
+}
+
+/* SdParser **********************************************************************************************************/
+static SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message);
+static SdResult SdParser_FailEof(void);
+static const char* SdParser_TypeString(SdTokenType type);
+static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type, SdToken_r* out_token);
+static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseQuery(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseQueryStep(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseQueryPred(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseElseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseForEach(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseWhile(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseDo(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+
+SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) {
+   SdStringBuf* buf;
+   SdResult result;
+   
+   buf = SdStringBuf_New();
+   SdStringBuf_AppendCStr(buf, "Line ");
+   SdStringBuf_AppendInt(buf, SdToken_SourceLine(token));
+   SdStringBuf_AppendCStr(buf, ": ");
+   SdStringBuf_AppendCStr(buf, message);
+   result = SdFail(code, SdStringBuf_CStr(buf));
+   SdStringBuf_Delete(buf);
+   return result;
+}
+
+SdResult SdParser_FailEof(void) {
+   return SdFail(SdErr_UNEXPECTED_EOF, "Unexpected EOF.");
+}
+
+SdResult SdParser_FailType(SdToken_r token, SdNodeType expected_type, SdNodeType actual_type) {
+   SdStringBuf* buf;
+   SdResult result;
+
+   buf = SdStringBuf_New();
+   SdStringBuf_AppendCStr(buf, "Expected: ");
+   SdStringBuf_AppendCStr(buf, SdParser_TypeString(expected_type));
+   SdStringBuf_AppendCStr(buf, "Actual: ");
+   SdStringBuf_AppendCStr(buf, SdParser_TypeString(actual_type));
+   result = SdParser_Fail(SdErr_UNEXPECTED_TOKEN, token, SdStringBuf_CStr(buf));
+   SdStringBuf_Delete(buf);
+   return result;
+}
+
+const char* SdParser_TypeString(SdTokenType type) {
+   switch (type) {
+      case SdTokenType_NONE: return "(none)";
+      case SdTokenType_INT_LIT: return "<integer literal>";
+      case SdTokenType_DOUBLE_LIT: return "<double literal>";
+      case SdTokenType_BOOL_LIT: return "<boolean literal>";
+      case SdTokenType_STRING_LIT: return "<string literal>";
+      case SdTokenType_OPEN_PAREN: return "(";
+      case SdTokenType_CLOSE_PAREN: return ")";
+      case SdTokenType_OPEN_BRACKET: return "[";
+      case SdTokenType_CLOSE_BRACKET: return "]";
+      case SdTokenType_OPEN_BRACE: return "{";
+      case SdTokenType_CLOSE_BRACE: return "}";
+      case SdTokenType_PIPE: return "|";
+      case SdTokenType_COLON: return ":";
+      case SdTokenType_EQUAL: return "=";
+      case SdTokenType_IDENTIFIER: return "<identifier>";
+      case SdTokenType_FUNCTION: return "function";
+      case SdTokenType_VAR: return "var";
+      case SdTokenType_SET: return "set";
+      case SdTokenType_IF: return "if";
+      case SdTokenType_ELSE: return "else";
+      case SdTokenType_ELSEIF: return "elseif";
+      case SdTokenType_FOR: return "for";
+      case SdTokenType_TO: return "to";
+      case SdTokenType_FOREACH: return "foreach";
+      case SdTokenType_AT: return "at";
+      case SdTokenType_IN: return "in";
+      case SdTokenType_WHILE: return "while";
+      case SdTokenType_DO: return "do";
+      case SdTokenType_SWITCH: return "switch";
+      case SdTokenType_CASE: return "case";
+      case SdTokenType_DEFAULT: return "default";
+      case SdTokenType_RETURN: return "return";
+      case SdTokenType_DIE: return "die";
+      case SdTokenType_INTRINSIC: return "intrinsic";
+      case SdTokenType_NIL: return "nil";
+      default: return "<unrecognized token type>";
+   }
+}
+
+SdResult SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* out_program_node) {
+   SdScanner* scanner;
+   SdList* functions;
+   SdList* statements;
+   SdToken_r token;
+   SdResult result;
+   
+   assert(env);
+   assert(text);
+   assert(out_program_node);
+   scanner = SdScanner_New();
+   functions = SdList_New();
+   statements = SdList_New();
+   
+   SdScanner_Tokenize(scanner, text);
+
+   while (SdScanner_Peek(scanner, &token)) {
+      SdTokenType token_type = SdToken_Type(token);
+      SdValue_r node;
+      if (token_type == SdTokenType_INTRINSIC || token_type == SdTokenType_FUNCTION) {
+         result = SdParser_ParseFunction(env, scanner, &node);
+         if (SdFailed(result))
+            goto end;
+         else
+            SdList_Append(functions, node);
+         break;
+      } else { /* if it's not a function, it must be a statement. */
+         result = SdParser_ParseStatement(env, scanner, &node);
+         if (SdFailed(result))
+            goto end;
+         else
+            SdList_Append(statements, node);
+         break;
+      }
+   }
+
+   *out_program_node = SdAst_Program_New(env, functions, statements);
+   functions = NULL;
+   statements = NULL;
+   result = SdResult_SUCCESS;
+
+end:
+   if (scanner) SdScanner_Delete(scanner);
+   if (functions) SdList_Delete(functions);
+   if (statements) SdList_Delete(statements);
+   return result;
+}
+
+SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type, SdToken_r* out_token) {
+   SdToken_r token;
+   SdTokenType actual_type;
+
+   if (!SdScanner_Read(scanner, &token))
+      return SdParser_FailEof();
+
+   actual_type = SdToken_Type(token);
+   if (actual_type != expected_type) {
+      return SdParser_FailType(token, expected_type, actual_type);
+   } else {
+      *out_token = token;
+      return SdResult_SUCCESS;
+   }
+}
+
+#define SdParser_READ() \
+   do { \
+      if (!SdScanner_Read(scanner, &token)) { \
+         result = SdParser_FailEof(); \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_EXPECT_TYPE(expected_type) \
+   do { \
+      if (SdToken_Type(token) != expected_type) { \
+         result = SdParser_FailType(token, expected_type, SdToken_Type(token)); \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_READ_EXPECT_TYPE(expected_type) \
+   do { \
+      if (SdFailed(result = SdParser_ReadExpectType(scanner, expected_type, &token))) { \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_READ_IDENTIFIER(identifier) \
+   do { \
+      SdParser_READ_EXPECT_TYPE(SdTokenType_IDENTIFIER); \
+      identifier = SdString_FromCStr(SdToken_Text(token)); \
+   } while (0)
+
+#define SdParser_CALL(x) \
+   do { \
+      if (SdFailed(result = (x))) { \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_READ_EXPR(expr) \
+   SdParser_CALL(SdParser_ParseExpr(env, scanner, &expr))
+
+#define SdParser_READ_BODY(body) \
+   SdParser_CALL(SdParser_ParseBody(env, scanner, &body))
+
+SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdTokenType type = SdTokenType_NONE;
+   SdResult result = SdResult_SUCCESS;
+   bool is_intrinsic = false;
+   SdString* function_name = NULL;
+   SdList* parameter_names = NULL;
+   SdValue_r body = NULL;
+
+   /* INTRINSIC? */
+   if (SdScanner_PeekType(scanner) == SdTokenType_INTRINSIC) {
+      is_intrinsic = true;
+      SdParser_READ();
+   }
+
+   /* FUNCTION */
+   SdParser_READ_EXPECT_TYPE(SdTokenType_FUNCTION);
+
+   /* (IDENTIFIER | EQUAL)*/
+   SdParser_READ();
+   switch (type = SdToken_Type(token)) {
+      case SdTokenType_IDENTIFIER:
+      case SdTokenType_EQUAL:
+         function_name = SdString_FromCStr(SdToken_Text(token));
+         break;
+      default: 
+         SdParser_EXPECT_TYPE(SdTokenType_IDENTIFIER);
+         break;
+   }
+
+   /* IDENTIFIER* */
+   while (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
+      SdParser_READ();
+      SdList_Append(parameter_names, SdEnv_BoxString(env, SdString_FromCStr(SdToken_Text(token))));
+   }
+
+   /* <body> */
+   SdParser_READ_BODY(body);
+
+   *out_node = SdAst_Function_New(env, function_name, parameter_names, body, is_intrinsic);
+   function_name = NULL;
+   parameter_names = NULL;
+end:
+   if (function_name) SdString_Delete(function_name);
+   if (parameter_names) SdList_Delete(parameter_names);
+   return result;
+}
+
+SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdList* statements = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACE);
+
+   statements = SdList_New();
+   while (SdScanner_PeekType(scanner) != SdTokenType_CLOSE_BRACE) {
+      SdValue_r statement;
+      SdParser_CALL(SdParser_ParseStatement(env, scanner, &statement));
+      SdList_Append(statements, statement);
+   }
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_BRACE);
+
+   *out_node = SdAst_Body_New(env, statements);
+   statements = NULL;
+end:
+   if (statements) SdList_Delete(statements);
+   return result;
+}
+
+SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+
+   switch (SdScanner_PeekType(scanner)) {
+      case SdTokenType_INT_LIT: {
+         int num;
+         SdParser_READ_EXPECT_TYPE(SdTokenType_INT_LIT);
+         num = (int)strtol(SdToken_Text(token), NULL, 10);
+         *out_node = SdAst_IntLit_New(env, num);
+         goto end;
+      }
+      
+      case SdTokenType_DOUBLE_LIT: {
+         double num;
+         SdParser_READ_EXPECT_TYPE(SdTokenType_DOUBLE_LIT);
+         num = atof(SdToken_Text(token));
+         *out_node = SdAst_DoubleLit_New(env, num);
+         goto end;
+      }
+
+      case SdTokenType_BOOL_LIT: {
+         bool val;
+         SdParser_READ_EXPECT_TYPE(SdTokenType_BOOL_LIT);
+         val = strcmp(SdToken_Text(token), "true") == 0;
+         *out_node = SdAst_BoolLit_New(env, val);
+         goto end;
+      }
+
+      case SdTokenType_STRING_LIT: {
+         char* str;
+         const char* inner_str;
+         size_t len;
+
+         SdParser_READ_EXPECT_TYPE(SdTokenType_STRING_LIT);
+         str = SdStrdup(SdToken_Text(token));
+         len = strlen(str);
+         assert(str[0] == '"');
+         assert(str[len - 1] == '"');
+         
+         str[len - 1] = 0; /* remove trailing quote */
+         inner_str = &str[1]; /* remove leading quote */
+
+         *out_node = SdAst_StringLit_New(env, SdString_FromCStr(inner_str));
+         SdFree(str);
+         goto end;
+      }
+
+      case SdTokenType_NIL: {
+         SdParser_READ_EXPECT_TYPE(SdTokenType_NIL);
+         *out_node = SdAst_NilLit_New(env);
+         goto end;
+      }
+
+      case SdTokenType_IDENTIFIER: {
+         SdString* identifier = NULL;
+         SdParser_READ_IDENTIFIER(identifier);
+         *out_node = SdAst_VarRef_New(env, identifier);
+         goto end;
+      }
+
+      case SdTokenType_OPEN_PAREN:
+      case SdTokenType_OPEN_BRACKET: {
+         result = SdParser_ParseCall(env, scanner, out_node);
+         goto end;
+      }
+
+      default:
+         result = SdFail(SdErr_UNEXPECTED_TOKEN, "Expected expression.");
+         goto end;
+   }
+
+end:
+   return result;
+}
+
+/* The syntax for a query is ( | stuff-here | ).
+   When we see the open paren the parser will think it's a function call, but then it sees
+   the pipe and passes control here. */
+SdResult SdParser_ParseQuery(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r initial_expr = NULL;
+   SdList* steps = NULL;
+
+   /* OPEN_PAREN has been consumed already. */
+   SdParser_READ_EXPECT_TYPE(SdTokenType_PIPE);
+
+   SdParser_READ_EXPR(initial_expr);
+
+   steps = SdList_New();
+   while (SdScanner_PeekType(scanner) == SdTokenType_ARROW) {
+      SdValue_r step;
+      SdParser_CALL(SdParser_ParseQueryStep(env, scanner, &step));
+      SdList_Append(steps, step);
+   }
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_PIPE);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
+
+   *out_node = SdAst_Query_New(env, initial_expr, steps);
+   steps = NULL;
+end:
+   if (steps) SdList_Delete(steps);
+   return result;
+}
+
+SdResult SdParser_ParseQueryStep(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* function_name = NULL;
+   SdList* arguments = NULL;
+   SdValue_r pred_or_null = NULL;
+
+   SdParser_READ_IDENTIFIER(function_name);
+
+   arguments = SdList_New();
+   while (SdScanner_PeekType(scanner) != SdTokenType_COLON && 
+          SdScanner_PeekType(scanner) != SdTokenType_PIPE &&
+          SdScanner_PeekType(scanner) != SdTokenType_ARROW) {
+      SdValue_r argument_expr;
+      SdParser_READ_EXPR(argument_expr);
+      SdList_Append(arguments, argument_expr);
+   }
+
+   if (SdScanner_PeekType(scanner) == SdTokenType_COLON) {
+      SdParser_CALL(SdParser_ParseQueryPred(env, scanner, &pred_or_null));
+   }
+
+   *out_node = SdAst_QueryStep_New(env, function_name, arguments, pred_or_null);
+   function_name = NULL;
+   arguments = NULL;
+end:
+   if (function_name) SdString_Delete(function_name);
+   if (arguments) SdList_Delete(arguments);
+   return result;
+}
+
+SdResult SdParser_ParseQueryPred(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* identifier = NULL;
+   SdValue_r expr = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
+   SdParser_READ_IDENTIFIER(identifier);
+   SdParser_READ_EXPR(expr);
+
+   *out_node = SdAst_QueryPred_New(env, identifier, expr);
+   identifier = NULL;
+end:
+   if (identifier) SdString_Delete(identifier);
+   return result;
+}
+
+SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   switch (SdScanner_PeekType(scanner)) {
+      case SdTokenType_OPEN_PAREN: return SdParser_ParseCall(env, scanner, out_node);
+      case SdTokenType_OPEN_BRACKET: return SdParser_ParseCall(env, scanner, out_node);
+      case SdTokenType_VAR: return SdParser_ParseVar(env, scanner, out_node);
+      case SdTokenType_SET: return SdParser_ParseSet(env, scanner, out_node);
+      case SdTokenType_IF: return SdParser_ParseIf(env, scanner, out_node);
+      case SdTokenType_FOR: return SdParser_ParseFor(env, scanner, out_node);
+      case SdTokenType_FOREACH: return SdParser_ParseForEach(env, scanner, out_node);
+      case SdTokenType_WHILE: return SdParser_ParseWhile(env, scanner, out_node);
+      case SdTokenType_DO: return SdParser_ParseDo(env, scanner, out_node);
+      case SdTokenType_SWITCH: return SdParser_ParseSwitch(env, scanner, out_node);
+      case SdTokenType_RETURN: return SdParser_ParseReturn(env, scanner, out_node);
+      case SdTokenType_DIE: return SdParser_ParseDie(env, scanner, out_node);
+      case SdTokenType_NONE: return SdParser_FailEof();
+      default: {
+         SdToken_r token;
+         SdScanner_Read(scanner, &token);
+         return SdParser_Fail(SdErr_UNEXPECTED_TOKEN, token, "Expected statement.");
+      }
+   }
+}
+
+SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* function_name = NULL;
+   SdList* arguments = NULL;
+
+   switch (SdScanner_PeekType(scanner)) {
+      case SdTokenType_OPEN_PAREN: {
+         SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
+
+         if (SdScanner_PeekType(scanner) == SdTokenType_PIPE) {
+            /* this is actually a query, not a regular function call */
+            result = SdParser_ParseQuery(env, scanner, out_node);
+            goto end;
+         }
+
+         SdParser_READ_IDENTIFIER(function_name);
+         while (SdScanner_PeekType(scanner) != SdTokenType_CLOSE_PAREN) {
+            SdValue_r arg_expr;
+            SdParser_READ_EXPR(arg_expr);
+            SdList_Append(arguments, arg_expr);
+         }
+         SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
+         break;
+      }
+
+      case SdTokenType_OPEN_BRACKET: {
+         SdValue_r arg_expr;
+         SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACKET);
+            
+         SdParser_READ_EXPR(arg_expr);
+         SdList_Append(arguments, arg_expr);
+
+         SdParser_READ_IDENTIFIER(function_name);
+
+         while (SdScanner_PeekType(scanner) != SdTokenType_CLOSE_BRACKET) {
+            SdParser_READ_EXPR(arg_expr);
+            SdList_Append(arguments, arg_expr);
+         }
+
+         SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_BRACKET);
+         break;
+      }
+
+      default:
+         result = SdFail(SdErr_UNEXPECTED_TOKEN, "Expected: ( [");
+         goto end;
+   }
+
+   *out_node = SdAst_Call_New(env, function_name, arguments);
+   function_name = NULL;
+   arguments = NULL;
+end:
+   if (function_name) SdString_Delete(function_name);
+   if (arguments) SdList_Delete(arguments);
+   return result;
+}
+
+SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* identifier = NULL;
+   SdValue_r expr = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_VAR);
+   SdParser_READ_IDENTIFIER(identifier);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_EQUAL);
+   SdParser_READ_EXPR(expr);
+
+   *out_node = SdAst_Var_New(env, identifier, expr);
+   identifier = NULL;
+end:
+   if (identifier) SdString_Delete(identifier);
+   return result;
+}
+
+
+SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* identifier = NULL;
+   SdValue_r expr = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_SET);
+   SdParser_READ_IDENTIFIER(identifier);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_EQUAL);
+   SdParser_READ_EXPR(expr);
+
+   *out_node = SdAst_Set_New(env, identifier, expr);
+   identifier = NULL;
+end:
+   if (identifier) SdString_Delete(identifier);
+   return result;
+}
+
+SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r condition_expr = NULL, true_body = NULL, else_body = NULL;
+   SdList* elseifs = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_IF);
+   SdParser_READ_EXPR(condition_expr);
+   SdParser_READ_BODY(true_body);
+
+   elseifs = SdList_New();
+   while (SdScanner_PeekType(scanner) == SdTokenType_ELSEIF) {
+      SdValue_r elseif;
+      SdParser_CALL(SdParser_ParseElseIf(env, scanner, &elseif));
+      SdList_Append(elseifs, elseif);
+   }
+
+   if (SdScanner_PeekType(scanner) == SdTokenType_ELSE) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_ELSE);
+      SdParser_READ_BODY(else_body);
+   }
+
+   *out_node = SdAst_If_New(env, condition_expr, true_body, elseifs, else_body);
+   elseifs = NULL;
+end:
+   if (elseifs) SdList_Delete(elseifs);
+   return result;
+}
+
+SdResult SdParser_ParseElseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r expr = NULL, body = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_ELSEIF);
+   SdParser_READ_EXPR(expr);
+   SdParser_READ_BODY(body);
+
+   *out_node = SdAst_ElseIf_New(env, expr, body);
+end:
+   return result;
+}
+
+SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* iter_name = NULL;
+   SdValue_r start_expr = NULL, stop_expr = NULL, body = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_FOR);
+   SdParser_READ_IDENTIFIER(iter_name);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_EQUAL);
+   SdParser_READ_EXPR(start_expr);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_TO);
+   SdParser_READ_EXPR(stop_expr);
+   SdParser_READ_BODY(body);
+
+   *out_node = SdAst_For_New(env, iter_name, start_expr, stop_expr, body);
+   iter_name = NULL;
+end:
+   if (iter_name) SdString_Delete(iter_name);
+   return result;
+}
+
+SdResult SdParser_ParseForEach(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* iter_name = NULL;
+   SdString* indexer_name = NULL;
+   SdValue_r collection_expr = NULL, body = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_FOREACH);
+   SdParser_READ_IDENTIFIER(iter_name);
+   if (SdScanner_PeekType(scanner) == SdTokenType_AT) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_AT);
+      SdParser_READ_IDENTIFIER(indexer_name);
+   }
+   SdParser_READ_EXPECT_TYPE(SdTokenType_IN);
+   SdParser_READ_EXPR(collection_expr);
+   SdParser_READ_BODY(body);
+
+   *out_node = SdAst_ForEach_New(env, iter_name, indexer_name, collection_expr, body);
+   iter_name = NULL;
+   indexer_name = NULL;
+end:
+   if (iter_name) SdString_Delete(iter_name);
+   if (indexer_name) SdString_Delete(indexer_name);
+   return result;
+}
+
+SdResult SdParser_ParseWhile(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r body = NULL, expr = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_WHILE);
+   SdParser_READ_EXPR(expr);
+   SdParser_READ_BODY(body);
+
+   *out_node = SdAst_While_New(env, expr, body);
+end:
+   return result;
+}
+
+SdResult SdParser_ParseDo(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r body = NULL, expr = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_DO);
+   SdParser_READ_BODY(body);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_WHILE);
+   SdParser_READ_EXPR(expr);
+
+   *out_node = SdAst_Do_New(env, expr, body);
+end:
+   return result;
+}
+
+SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r condition_expr = NULL, default_body = NULL;
+   SdList* cases = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_SWITCH);
+   SdParser_READ_EXPR(condition_expr);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACE);
+
+   cases = SdList_New();
+   while (SdScanner_PeekType(scanner) == SdTokenType_CASE) {
+      SdValue_r case_v;
+      SdParser_CALL(SdParser_ParseCase(env, scanner, &case_v));
+      SdList_Append(cases, case_v);
+   }
+
+   if (SdScanner_PeekType(scanner) == SdTokenType_DEFAULT) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_DEFAULT);
+      SdParser_READ_BODY(default_body);
+   }
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_BRACE);
+
+   *out_node = SdAst_Switch_New(env, condition_expr, cases, default_body);
+   cases = NULL;
+end:
+   if (cases) SdList_Delete(cases);
+   return result;
+}
+
+SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r expr = NULL, body = NULL;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_CASE);
+   SdParser_READ_EXPR(expr);
+   SdParser_READ_BODY(body);
+
+   *out_node = SdAst_Case_New(env, expr, body);
+end:
+   return result;
+}
+
+SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r expr;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_RETURN);
+   SdParser_READ_EXPR(expr);
+   *out_node = SdAst_Return_New(env, expr);
+end:
+   return result;
+}
+
+SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r expr;
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_DIE);
+   SdParser_READ_EXPR(expr);
+   *out_node = SdAst_Die_New(env, expr);
+end:
+   return result;
 }

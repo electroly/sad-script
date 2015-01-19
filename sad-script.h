@@ -63,8 +63,10 @@ typedef struct SdScanner_s SdScanner;
 typedef struct SdScanner_s* SdScanner_r;
 
 typedef enum SdErr_e {
-   SdErr_SUCCESS = 1,
-   SdErr_NAME_COLLISION = 2
+   SdErr_SUCCESS = 0,
+   SdErr_NAME_COLLISION,
+   SdErr_UNEXPECTED_EOF,
+   SdErr_UNEXPECTED_TOKEN
 } SdErr;
 
 typedef enum SdType_e {
@@ -78,6 +80,7 @@ typedef enum SdType_e {
 } SdType;
 
 typedef enum SdTokenType_e {
+   SdTokenType_NONE = 0, /* indicates the lack of a token */
    SdTokenType_INT_LIT,
    SdTokenType_DOUBLE_LIT,
    SdTokenType_BOOL_LIT,
@@ -90,12 +93,16 @@ typedef enum SdTokenType_e {
    SdTokenType_CLOSE_BRACE,
    SdTokenType_PIPE,
    SdTokenType_COLON,
+   SdTokenType_EQUAL,
    SdTokenType_IDENTIFIER,
    SdTokenType_FUNCTION,
    SdTokenType_VAR,
    SdTokenType_SET,
    SdTokenType_IF,
+   SdTokenType_ELSE,
+   SdTokenType_ELSEIF,
    SdTokenType_FOR,
+   SdTokenType_TO,
    SdTokenType_FOREACH,
    SdTokenType_AT,
    SdTokenType_IN,
@@ -105,7 +112,10 @@ typedef enum SdTokenType_e {
    SdTokenType_CASE,
    SdTokenType_DEFAULT,
    SdTokenType_RETURN,
-   SdTokenType_DIE
+   SdTokenType_DIE,
+   SdTokenType_INTRINSIC,
+   SdTokenType_NIL,
+   SdTokenType_ARROW
 } SdTokenType;
 
 typedef enum SdNodeType_e {
@@ -133,7 +143,7 @@ typedef enum SdNodeType_e {
    SdNodeType_SWITCH,
    SdNodeType_CASE,
    SdNodeType_RETURN,
-   SdNodeType_THROW,
+   SdNodeType_DIE,
 
    /* Expressions */
    SdNodeType_INT_LIT,
@@ -167,8 +177,10 @@ struct SdResult_s {
    char message[80];
 };
 
-SdResult       SdSuccess(void);
+extern SdResult SdResult_SUCCESS;
+
 SdResult       SdFail(SdErr code, const char* message);
+bool           SdFailed(SdResult result);
 
 /* SdString **********************************************************************************************************/
 SdString*      SdString_New(void);
@@ -276,7 +288,7 @@ SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
    Program:                                    
       (list PROGRAM     (list Function ...)    (list Statement ...))
    Function:                                   
-      (list FUNCTION    name:Str               Body)
+      (list FUNCTION    name:Str               (list param:Str ...)   Body               is-intrinsic:Bool)
    Statement:                                  
       (list CALL        function-name:Str      (list Expr...))
       (list VAR         variable-name:Str      value:Expr)
@@ -288,7 +300,7 @@ SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
       (list DO          condition:Expr         Body)
       (list SWITCH      Expr                   (list Case ...)        default:Body)
       (list RETURN      Expr)
-      (list THROW       Expr)
+      (list DIE         Expr)
    ElseIf:                                     
       (list ELSEIF      condition:Expr         Body)
    Case:                                       
@@ -316,9 +328,12 @@ SdValue_r      SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* stateme
 SdList_r       SdAst_Program_Functions(SdValue_r self);
 SdList_r       SdAst_Program_Statements(SdValue_r self);
 
-SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdValue_r body);
+SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
+                  bool is_intrinsic);
 SdString_r     SdAst_Function_Name(SdValue_r self);
 SdValue_r      SdAst_Function_Body(SdValue_r self);
+SdList_r       SdAst_Function_ParameterNames(SdValue_r self);
+bool           SdAst_Function_IsIntrinsic(SdValue_r self);
 
 SdValue_r      SdAst_Body_New(SdEnv_r env, SdList* statements);
 SdList_r       SdAst_Body_Statements(SdValue_r self);
@@ -380,8 +395,8 @@ SdValue_r      SdAst_Case_Body(SdValue_r self);
 SdValue_r      SdAst_Return_New(SdEnv_r env, SdValue_r expr);
 SdValue_r      SdAst_Return_Expr(SdValue_r self);
 
-SdValue_r      SdAst_Throw_New(SdEnv_r env, SdValue_r expr);
-SdValue_r      SdAst_Throw_Expr(SdValue_r self);
+SdValue_r      SdAst_Die_New(SdEnv_r env, SdValue_r expr);
+SdValue_r      SdAst_Die_Expr(SdValue_r self);
 
 SdValue_r      SdAst_IntLit_New(SdEnv_r env, int value);
 int            SdAst_IntLit_Value(SdValue_r self);
@@ -443,8 +458,13 @@ const char*    SdToken_Text(SdToken_r self);
 SdScanner*     SdScanner_New(void);
 void           SdScanner_Delete(SdScanner* self);
 void           SdScanner_Tokenize(SdScanner_r self, const char* text);
-bool           SdScanner_PeekToken(SdScanner_r self, SdToken** out_token); /* true = token was read, false = eof */
-bool           SdScanner_NextToken(SdScanner_r self, SdToken** out_token); /* true = token was read, false = eof */
+bool           SdScanner_IsEof(SdScanner_r self);
+bool           SdScanner_Peek(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
+SdTokenType    SdScanner_PeekType(SdScanner_r self); /* SdTokenType_NONE if eof */
+bool           SdScanner_Read(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
+
+/* SdParser **********************************************************************************************************/
+SdResult       SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* out_program_node);
 
 #ifdef _MSC_VER
 #pragma warning(pop) /* our disabled warnings won't affect files that #include this header */
