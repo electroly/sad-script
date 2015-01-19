@@ -83,6 +83,55 @@ bool SdFailed(SdResult result) {
    return result.code != SdErr_SUCCESS;
 }
 
+/* Sad ***************************************************************************************************************/
+struct Sad_s {
+   SdEnv* env;
+   SdEngine* engine;
+};
+
+Sad* Sad_New(void) {
+   Sad* self = SdAlloc(sizeof(Sad));
+   self->env = SdEnv_New();
+   self->engine = SdEngine_New(self->env);
+   return self;
+}
+
+void Sad_Delete(Sad* self) {
+   assert(self);
+   SdEnv_Delete(self->env);
+   SdEngine_Delete(self->engine);
+   SdFree(self);
+}
+
+SdResult Sad_CallFunction(Sad_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return) {
+   assert(self);
+   assert(function_name);
+   assert(arguments);
+   assert(out_return);
+   return SdEngine_Call(self->engine, function_name, arguments, out_return);
+}
+
+SdResult Sad_ExecuteScript(Sad_r self, const char* code) {
+   SdValue_r program_node;
+   SdResult result;
+
+   assert(self);
+   assert(code);
+
+   if (SdFailed(result = SdParser_ParseProgram(self->env, code, &program_node)))
+      return result;
+
+   if (SdFailed(result = SdEnv_AddProgramAst(self->env, program_node)))
+      return result;
+
+   return SdEngine_ExecuteTopLevelStatements(self->engine);
+}
+
+SdEnv_r Sad_Env(Sad_r self) {
+   assert(self);
+   return self->env;
+}
+
 /* SdString **********************************************************************************************************/
 struct SdString_s {
    char* buffer; /* includes null terminator */
@@ -2137,7 +2186,6 @@ end:
    return result;
 }
 
-
 SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
@@ -2341,5 +2389,105 @@ SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node
    SdParser_READ_EXPR(expr);
    *out_node = SdAst_Die_New(env, expr);
 end:
+   return result;
+}
+
+/* SdEngine **********************************************************************************************************/
+struct SdEngine_s {
+   SdEnv_r env;
+};
+
+static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r expr, SdValue_r* out_return);
+static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r statement, SdValue_r* out_return);
+static SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r statement);
+static SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r statement);
+
+SdEngine* SdEngine_New(SdEnv_r env) {
+   SdEngine* self = SdAlloc(sizeof(SdEngine));
+   self->env = env;
+   return self;
+}
+
+void SdEngine_Delete(SdEngine* self) {
+   assert(self);
+   SdFree(self);
+}
+
+SdResult SdEngine_ExecuteTopLevelStatements(SdEngine_r self) {
+   SdResult result = SdResult_SUCCESS;
+   SdList_r statements;
+   size_t i, count;
+   
+   statements = SdEnv_Root_Statements(SdEnv_Root(self->env));
+   count = SdList_Count(statements);
+   for (i = 0; i < count; i++) {
+      SdValue_r statement;
+
+      statement = SdList_GetAt(statements, i);
+      if (SdFailed(result = SdEngine_ExecuteStatement(self, statement)))
+         return result;
+   }
+
+   return result;
+}
+
+SdResult SdEngine_Call(SdEngine_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return) {
+   /*todo*/
+}
+
+SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r expr, SdValue_r* out_return) {
+   /*todo*/
+}
+
+SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r statement) {
+   switch (SdAst_NodeType(statement)) {
+      case SdNodeType_CALL: {
+         SdValue_r return_value;
+         return SdEngine_ExecuteCall(self, statement, &return_value);
+      }
+      case SdNodeType_VAR: return SdEngine_ExecuteVar(self, statement);
+      case SdNodeType_SET: return SdEngine_ExecuteSet(self, statement);
+      case SdNodeType_IF: return SdEngine_ExecuteIf(self, statement);
+      case SdNodeType_FOR: return SdEngine_ExecuteFor(self, statement);
+      case SdNodeType_FOREACH: return SdEngine_ExecuteForEach(self, statement);
+      case SdNodeType_WHILE: return SdEngine_ExecuteWhile(self, statement);
+      case SdNodeType_DO: return SdEngine_ExecuteDo(self, statement);
+      case SdNodeType_SWITCH: return SdEngine_ExecuteSwitch(self, statement);
+      case SdNodeType_RETURN: return SdEngine_ExecuteReturn(self, statement);
+      case SdNodeType_DIE: return SdEngine_ExecuteDie(self, statement);
+      default: return SdFail(SdErr_UNEXPECTED_TOKEN, "Unexpected node type; expected a statement type.");
+   }
+}
+
+SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r statement, SdValue_r* out_return) {
+   SdResult result;
+   SdList_r argument_exprs;
+   SdList* argument_values;
+   size_t i, num_arguments;
+   
+   argument_exprs = SdAst_Call_Arguments(statement);
+   argument_values = SdList_New();
+   num_arguments = SdList_Count(argument_exprs);
+
+   for (i = 0; i < num_arguments; i++) {
+      SdValue_r argument_expr, argument_value;
+      argument_expr = SdList_GetAt(argument_exprs, i);
+      if (SdFailed(result = SdEngine_EvaluateExpr(self, argument_expr, &argument_value)))
+         goto end;
+      SdList_Append(argument_values, argument_value);
+   }
+
+   result = SdEngine_Call(self, SdAst_Call_FunctionName(statement), argument_values, out_return);
+end:
+   if (argument_values) SdList_Delete(argument_values);
    return result;
 }

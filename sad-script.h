@@ -18,8 +18,8 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-#ifndef _SAD_BASIC_H_
-#define _SAD_BASIC_H_
+#ifndef _SAD_SCRIPT_H_
+#define _SAD_SCRIPT_H_
 
 #ifdef _MSC_VER
 #pragma warning(push, 0) /* ignore warnings in system headers */
@@ -61,6 +61,8 @@ typedef struct SdToken_s SdToken;
 typedef struct SdToken_s* SdToken_r;
 typedef struct SdScanner_s SdScanner;
 typedef struct SdScanner_s* SdScanner_r;
+typedef struct SdEngine_s SdEngine;
+typedef struct SdEngine_s* SdEngine_r;
 
 typedef enum SdErr_e {
    SdErr_SUCCESS = 0,
@@ -162,14 +164,7 @@ typedef struct SdSearchResult_s {
    bool exact; /* true = index is an exact match, false = index is the next highest match */
 } SdSearchResult;
 
-typedef int(*SdSearchCompareFunc)(SdValue_r lhs, void* context);
-
-/* Sad ***************************************************************************************************************/
-Sad*           Sad_New(void);
-void           Sad_Delete(Sad* self);
-SdResult       Sad_CallFunction(Sad_r self, SdString_r function_name, SdList_r arguments);
-SdResult       Sad_ExecuteScript(Sad_r self, SdString_r code);
-SdEnv_r        Sad_Env(Sad_r self);
+typedef int (*SdSearchCompareFunc)(SdValue_r lhs, void* context);
 
 /* SdResult ***********************************************************************************************************/
 struct SdResult_s {
@@ -181,6 +176,13 @@ extern SdResult SdResult_SUCCESS;
 
 SdResult       SdFail(SdErr code, const char* message);
 bool           SdFailed(SdResult result);
+
+/* Sad ***************************************************************************************************************/
+Sad*           Sad_New(void);
+void           Sad_Delete(Sad* self);
+SdResult       Sad_CallFunction(Sad_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return);
+SdResult       Sad_ExecuteScript(Sad_r self, const char* code);
+SdEnv_r        Sad_Env(Sad_r self);
 
 /* SdString **********************************************************************************************************/
 SdString*      SdString_New(void);
@@ -249,8 +251,6 @@ void           SdEnv_Delete(SdEnv* self);
 SdValue_r      SdEnv_Root(SdEnv_r self);
 SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
-SdResult       SdEnv_ExecuteTopLevelStatements(SdEnv_r self);
-SdResult       SdEnv_CallFunction(SdEnv_r self, SdString_r function_name, SdList_r arguments);
 void           SdEnv_CollectGarbage(SdEnv_r self);
 void           SdEnv_PushFrame(SdEnv_r self);
 void           SdEnv_PopFrame(SdEnv_r self);
@@ -466,8 +466,14 @@ bool           SdScanner_Read(SdScanner_r self, SdToken_r* out_token); /* true =
 /* SdParser **********************************************************************************************************/
 SdResult       SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* out_program_node);
 
+/* SdEngine **********************************************************************************************************/
+SdEngine*      SdEngine_New(SdEnv_r env);
+void           SdEngine_Delete(SdEngine* self);
+SdResult       SdEngine_ExecuteTopLevelStatements(SdEngine_r self);
+SdResult       SdEngine_Call(SdEngine_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return);
+
 #ifdef _MSC_VER
 #pragma warning(pop) /* our disabled warnings won't affect files that #include this header */
 #endif
 
-#endif /* _SAD_BASIC_H_ */
+#endif /* _SAD_SCRIPT_H_ */
