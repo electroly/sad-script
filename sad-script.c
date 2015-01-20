@@ -993,28 +993,28 @@ SdValue_r SdAst_IntLit_New(SdEnv_r env, int value) {
    SdAst_INT(value)
    SdAst_END
 }
-SdAst_INT_GETTER(SdAst_IntLit_Value, SdNodeType_INT_LIT, 1)
+SdAst_VALUE_GETTER(SdAst_IntLit_Value, SdNodeType_INT_LIT, 1)
 
 SdValue_r SdAst_DoubleLit_New(SdEnv_r env, double value) {
    SdAst_BEGIN(SdNodeType_DOUBLE_LIT)
    SdAst_DOUBLE(value)
    SdAst_END
 }
-SdAst_DOUBLE_GETTER(SdAst_DoubleLit_Value, SdNodeType_DOUBLE_LIT, 1)
+SdAst_VALUE_GETTER(SdAst_DoubleLit_Value, SdNodeType_DOUBLE_LIT, 1)
 
 SdValue_r SdAst_BoolLit_New(SdEnv_r env, bool value) {
    SdAst_BEGIN(SdNodeType_BOOL_LIT)
    SdAst_BOOL(value)
    SdAst_END
 }
-SdAst_BOOL_GETTER(SdAst_BoolLit_Value, SdNodeType_BOOL_LIT, 1)
+SdAst_VALUE_GETTER(SdAst_BoolLit_Value, SdNodeType_BOOL_LIT, 1)
 
 SdValue_r SdAst_StringLit_New(SdEnv_r env, SdString* value) {
    SdAst_BEGIN(SdNodeType_STRING_LIT)
    SdAst_STRING(value)
    SdAst_END
 }
-SdAst_STRING_GETTER(SdAst_StringLit_Value, SdNodeType_STRING_LIT, 1)
+SdAst_VALUE_GETTER(SdAst_StringLit_Value, SdNodeType_STRING_LIT, 1)
 
 SdValue_r SdAst_NilLit_New(SdEnv_r env) {
    SdAst_BEGIN(SdNodeType_NIL_LIT)
@@ -1093,7 +1093,7 @@ SdAst_VALUE_GETTER(SdEnv_VariableSlot_Value, SdNodeType_VAR_SLOT, 2)
 
 /* SdValueSet ********************************************************************************************************/
 struct SdValueSet_s {
-   SdList* list; /* elements arse sorted by pointer value */
+   SdList* list; /* elements are sorted by pointer value */
 };
 
 static int SdValueSet_CompareFunc(SdValue_r lhs, void* context);
@@ -1682,6 +1682,48 @@ static SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
 static SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 
+#define SdParser_READ() \
+   do { \
+      if (!SdScanner_Read(scanner, &token)) { \
+         result = SdParser_FailEof(); \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_EXPECT_TYPE(expected_type) \
+   do { \
+      if (SdToken_Type(token) != expected_type) { \
+         result = SdParser_FailType(token, expected_type, SdToken_Type(token)); \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_READ_EXPECT_TYPE(expected_type) \
+   do { \
+      if (SdFailed(result = SdParser_ReadExpectType(scanner, expected_type, &token))) { \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_READ_IDENTIFIER(identifier) \
+   do { \
+      SdParser_READ_EXPECT_TYPE(SdTokenType_IDENTIFIER); \
+      identifier = SdString_FromCStr(SdToken_Text(token)); \
+   } while (0)
+
+#define SdParser_CALL(x) \
+   do { \
+      if (SdFailed(result = (x))) { \
+         goto end; \
+      } \
+   } while (0)
+
+#define SdParser_READ_EXPR(expr) \
+   SdParser_CALL(SdParser_ParseExpr(env, scanner, &expr))
+
+#define SdParser_READ_BODY(body) \
+   SdParser_CALL(SdParser_ParseBody(env, scanner, &body))
+
 SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) {
    SdStringBuf* buf;
    SdResult result;
@@ -1818,48 +1860,6 @@ SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type,
       return SdResult_SUCCESS;
    }
 }
-
-#define SdParser_READ() \
-   do { \
-      if (!SdScanner_Read(scanner, &token)) { \
-         result = SdParser_FailEof(); \
-         goto end; \
-      } \
-   } while (0)
-
-#define SdParser_EXPECT_TYPE(expected_type) \
-   do { \
-      if (SdToken_Type(token) != expected_type) { \
-         result = SdParser_FailType(token, expected_type, SdToken_Type(token)); \
-         goto end; \
-      } \
-   } while (0)
-
-#define SdParser_READ_EXPECT_TYPE(expected_type) \
-   do { \
-      if (SdFailed(result = SdParser_ReadExpectType(scanner, expected_type, &token))) { \
-         goto end; \
-      } \
-   } while (0)
-
-#define SdParser_READ_IDENTIFIER(identifier) \
-   do { \
-      SdParser_READ_EXPECT_TYPE(SdTokenType_IDENTIFIER); \
-      identifier = SdString_FromCStr(SdToken_Text(token)); \
-   } while (0)
-
-#define SdParser_CALL(x) \
-   do { \
-      if (SdFailed(result = (x))) { \
-         goto end; \
-      } \
-   } while (0)
-
-#define SdParser_READ_EXPR(expr) \
-   SdParser_CALL(SdParser_ParseExpr(env, scanner, &expr))
-
-#define SdParser_READ_BODY(body) \
-   SdParser_CALL(SdParser_ParseBody(env, scanner, &body))
 
 SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
@@ -2395,9 +2395,12 @@ end:
 /* SdEngine **********************************************************************************************************/
 struct SdEngine_s {
    SdEnv_r env;
+   SdValue_r nil;
 };
 
 static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r expr, SdValue_r* out_return);
+static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r query, SdValue_r* out_return);
+static SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r query, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r statement);
 static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r statement, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r statement);
@@ -2414,6 +2417,7 @@ static SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r statement);
 SdEngine* SdEngine_New(SdEnv_r env) {
    SdEngine* self = SdAlloc(sizeof(SdEngine));
    self->env = env;
+   self->nil = SdEnv_BoxNil(env);
    return self;
 }
 
@@ -2445,7 +2449,73 @@ SdResult SdEngine_Call(SdEngine_r self, SdString_r function_name, SdList_r argum
 }
 
 SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r expr, SdValue_r* out_return) {
-   /*todo*/
+   SdResult result = SdResult_SUCCESS;
+
+   assert(self);
+   assert(expr);
+   assert(out_return);
+   switch (SdAst_NodeType(expr)) {
+      case SdNodeType_INT_LIT:
+         *out_return = SdAst_IntLit_Value(expr);
+         break;
+
+      case SdNodeType_DOUBLE_LIT:
+         *out_return = SdAst_DoubleLit_Value(expr);
+         break;
+
+      case SdNodeType_BOOL_LIT:
+         *out_return = SdAst_BoolLit_Value(expr);
+         break;
+
+      case SdNodeType_STRING_LIT:
+         *out_return = SdAst_StringLit_Value(expr);
+         break;
+
+      case SdNodeType_NIL_LIT:
+         *out_return = self->nil;
+         break;
+
+      case SdNodeType_VAR_REF:
+         result = SdEngine_EvaluateVarRef(self, expr, out_return);
+         break;
+
+      case SdNodeType_QUERY:
+         result = SdEngine_EvaluateQuery(self, expr, out_return);
+         break;
+
+      case SdNodeType_CALL:
+         result = SdEngine_Call(self, SdAst_Call_FunctionName(expr), SdAst_Call_Arguments(expr), out_return);
+         break;
+   }
+
+   return result;
+}
+
+static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r query, SdValue_r* out_return) {
+   SdString_r identifier;
+   SdValue_r value;
+   SdResult result = SdResult_SUCCESS;
+
+   identifier = SdAst_VarRef_Identifier(query);
+   value = SdEnv_FindStackVariable(self->env, identifier);
+   if (value) {
+      *out_return = value;
+   } else {
+      SdStringBuf* buf = SdStringBuf_New();
+      SdStringBuf_AppendCStr(buf, "Use of undeclared variable: ");
+      SdStringBuf_AppendString(buf, identifier);
+      result = SdFail(SdErr_UNDECLARED_VARIABLE, SdStringBuf_CStr(buf));
+      SdStringBuf_Delete(buf);
+   }
+
+   return result;
+}
+
+static SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r query, SdValue_r* out_return) {
+   self = NULL;
+   query = NULL;
+   out_return = NULL;
+   return SdFail(999, "Not implemented"); /*todo*/
 }
 
 SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r statement) {

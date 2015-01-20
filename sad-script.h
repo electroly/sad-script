@@ -25,8 +25,15 @@
 #pragma warning(push, 0) /* ignore warnings in system headers */
 #endif
 
-#include <stdlib.h> /* size_t */
-#include <stdbool.h> /* bool */
+#include <stdlib.h>
+
+/* stdbool.h is not part of C89 but we want to be compatible with projects building against later C versions, so
+   don't clobber bool/true/false with our own definitions. */
+#if !defined(__bool_true_false_are_defined) && !defined(bool)
+#define bool int
+#define false 0
+#define true 1
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop) /* start showing warnings again */
@@ -34,9 +41,16 @@
 #pragma warning(disable: 4820) /* '4' bytes padding added after data member '...' */
 #endif
 
+/*********************************************************************************************************************/
+typedef enum SdErr_e SdErr;
+typedef enum SdType_e SdType;
+typedef enum SdTokenType_e SdTokenType;
+typedef enum SdNodeType_e SdNodeType;
+
 /* Raw pointer: ownership is being transferred.
-_r suffix: a pointer is being borrowed, but ownership is not transferred. */
+   _r suffix: a pointer is being borrowed only; ownership is not transferred. */
 typedef struct SdResult_s SdResult;
+typedef struct SdSearchResult_s SdSearchResult;
 typedef struct Sad_s Sad;
 typedef struct Sad_s* Sad_r;
 typedef struct SdString_s SdString;
@@ -64,14 +78,16 @@ typedef struct SdScanner_s* SdScanner_r;
 typedef struct SdEngine_s SdEngine;
 typedef struct SdEngine_s* SdEngine_r;
 
-typedef enum SdErr_e {
+/* Data Structures ***************************************************************************************************/
+enum SdErr_e {
    SdErr_SUCCESS = 0,
    SdErr_NAME_COLLISION,
    SdErr_UNEXPECTED_EOF,
-   SdErr_UNEXPECTED_TOKEN
-} SdErr;
+   SdErr_UNEXPECTED_TOKEN,
+   SdErr_UNDECLARED_VARIABLE
+};
 
-typedef enum SdType_e {
+enum SdType_e {
    /* These numeric values are returned by (type-of) and must not change. */
    SdType_NIL = 0,
    SdType_INT = 1,
@@ -79,9 +95,9 @@ typedef enum SdType_e {
    SdType_BOOL = 3,
    SdType_STRING = 4,
    SdType_LIST = 5
-} SdType;
+};
 
-typedef enum SdTokenType_e {
+enum SdTokenType_e {
    SdTokenType_NONE = 0, /* indicates the lack of a token */
    SdTokenType_INT_LIT,
    SdTokenType_DOUBLE_LIT,
@@ -118,9 +134,9 @@ typedef enum SdTokenType_e {
    SdTokenType_INTRINSIC,
    SdTokenType_NIL,
    SdTokenType_ARROW
-} SdTokenType;
+};
 
-typedef enum SdNodeType_e {
+enum SdNodeType_e {
    /* Environment */
    SdNodeType_ROOT,
    SdNodeType_FRAME,
@@ -157,21 +173,21 @@ typedef enum SdNodeType_e {
    SdNodeType_QUERY,
    SdNodeType_QUERY_STEP,
    SdNodeType_QUERY_PRED
-} SdNodeType;
+};
 
-typedef struct SdSearchResult_s {
-   int index; /* could be one past the end of the list if search name > everything */
-   bool exact; /* true = index is an exact match, false = index is the next highest match */
-} SdSearchResult;
-
-typedef int (*SdSearchCompareFunc)(SdValue_r lhs, void* context);
-
-/* SdResult ***********************************************************************************************************/
 struct SdResult_s {
    SdErr code;
    char message[80];
 };
 
+struct SdSearchResult_s {
+   int index; /* could be one past the end of the list if search name > everything */
+   bool exact; /* true = index is an exact match, false = index is the next highest match */
+};
+
+typedef int (*SdSearchCompareFunc)(SdValue_r lhs, void* context);
+
+/* SdResult ***********************************************************************************************************/
 extern SdResult SdResult_SUCCESS;
 
 SdResult       SdFail(SdErr code, const char* message);
@@ -399,16 +415,16 @@ SdValue_r      SdAst_Die_New(SdEnv_r env, SdValue_r expr);
 SdValue_r      SdAst_Die_Expr(SdValue_r self);
 
 SdValue_r      SdAst_IntLit_New(SdEnv_r env, int value);
-int            SdAst_IntLit_Value(SdValue_r self);
+SdValue_r      SdAst_IntLit_Value(SdValue_r self);
 
 SdValue_r      SdAst_DoubleLit_New(SdEnv_r env, double value);
-double         SdAst_DoubleLit_Value(SdValue_r self);
+SdValue_r      SdAst_DoubleLit_Value(SdValue_r self);
 
 SdValue_r      SdAst_BoolLit_New(SdEnv_r env, bool value);
-bool           SdAst_BoolLit_Value(SdValue_r self);
+SdValue_r      SdAst_BoolLit_Value(SdValue_r self);
 
 SdValue_r      SdAst_StringLit_New(SdEnv_r env, SdString* value);
-SdString_r     SdAst_StringLit_Value(SdValue_r self);
+SdValue_r      SdAst_StringLit_Value(SdValue_r self);
 
 SdValue_r      SdAst_NilLit_New(SdEnv_r env);
 
@@ -472,6 +488,7 @@ void           SdEngine_Delete(SdEngine* self);
 SdResult       SdEngine_ExecuteTopLevelStatements(SdEngine_r self);
 SdResult       SdEngine_Call(SdEngine_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return);
 
+/*********************************************************************************************************************/
 #ifdef _MSC_VER
 #pragma warning(pop) /* our disabled warnings won't affect files that #include this header */
 #endif

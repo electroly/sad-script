@@ -6,7 +6,7 @@
 <body> ::= OPEN_BRACE <statement>* CLOSE_BRACE
 <expression> ::= INT_LIT | DOUBLE_LIT | BOOL_LIT | STRING_LIT | NIL | <call> | <infix-call> | IDENTIFIER | <query>
 <call> ::= OPEN_PAREN IDENTIFIER IDENTIFIER* CLOSE_PAREN
-<infix-call> ::= OPEN_BRACKET <expression> IDENTIFIER <expression> CLOSE_BRACKET
+<infix-call> ::= OPEN_BRACKET <expression> IDENTIFIER <expression>* CLOSE_BRACKET
 <query> ::= OPEN_PAREN PIPE <expression> <query-step>* PIPE CLOSE_PAREN
 <query-step> ::= ARROW IDENTIFIER <expression>* <query-pred>?
 <query-pred> ::= COLON IDENTIFIER <expression>
