@@ -27,13 +27,15 @@ intrinsic function ^ a b {}
 intrinsic function type-of x {}
 intrinsic function and a b {}
 intrinsic function or a b {}
+intrinsic function not x {}
 intrinsic function << a b {}
 intrinsic function >> a b {}
-intrinsic function list.count self {}
+intrinsic function list.length self {}
 intrinsic function list.get-at self index {}
 intrinsic function list.set-at! self index value {}
 intrinsic function list.insert-at! self index value {}
 intrinsic function list.remove-at! self index {}
+intrinsic function string.length self {}
 intrinsic function string.eq? a b {}
 intrinsic function string.hash self {}
 intrinsic function string.append! self suffix {}
@@ -42,10 +44,23 @@ intrinsic function bool.eq? a b {}
 intrinsic function double.eq? a b {}
 intrinsic function double.hash self {}
 
+// Constants //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var TYPE-NIL 0
+var TYPE-INT 1
+var TYPE-DOUBLE 2
+var TYPE-BOOL 3
+var TYPE-STRING 4
+var TYPE-LIST 5
+
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 function nil? self {
    return [(type-of self) int.eq? TYPE-NIL]
+}
+
+function non-nil? self {
+   return (not (nil? self))
 }
 
 function zero? self {
@@ -61,11 +76,11 @@ function false? self {
 }
 
 function list.eq? a b {
-   if (not [(count a) int.eq? (count b)]) {
+   if (not [(list.length a) int.eq? (list.length b)]) {
       return false
    } else {
-      foreach a-item at i in a {
-         var b-item = [b @ i]
+      for a-item at i in a {
+         var b-item [b @ i]
          if (not [a-item = b-item]) {
             return false
          }
@@ -75,7 +90,7 @@ function list.eq? a b {
 }
 
 function list.append! self value {
-   var index = [[self list.count] - 1]
+   var index [[self list.count] - 1]
    [self list.insert-at! index value]
 }
 
@@ -84,9 +99,9 @@ function int.hash self {
 }
 
 function list.hash self {
-   var value = 0
-   foreach x at i in self {
-      set value = [value ^ [(hash x) * [i + 1]]
+   var value 0
+   for x at i in self {
+      set value [value ^ [(hash x) * [i + 1]]
    }
    return value
 }
@@ -100,8 +115,8 @@ function bool.hash self {
 }
 
 function = a b {
-   var a-type = (type-of a)
-   var b-type = (type-of b)
+   var a-type (type-of a)
+   var b-type (type-of b)
    if (not [a-type int.eq? b-type]) {
       return false
    }
@@ -122,7 +137,7 @@ function = a b {
          return [a list.eq? b]
       }
       default {
-         throw "Unknown type ID."
+         die "Unknown type ID."
       }
    }
 }
@@ -145,7 +160,7 @@ function hash self {
          return [self list.hash]
       }
       default {
-         throw "Unknown type ID."
+         die "Unknown type ID."
       }
    }
 }
@@ -154,28 +169,52 @@ function += collection item {
    [collection list.append! item]
 }
 
-function @ collection index {
-   return [collection list.get-at index]
+function @ self index {
+   switch (type-of self) {
+      case TYPE-STRING {
+         return [self string.get-at index]
+      }
+      case TYPE-LIST {
+         return [self list.get-at index]
+      }
+      default {
+         die "Expected string or list."
+      }
+   }
 }
 
-function @= collection index value {
+function @= self index value {
    [collection list.set-at! index value]
+}
+
+function length self {
+   switch (type-of self) {
+      case TYPE-STRING {
+         return [self string.length]
+      }
+      case TYPE-LIST {
+         return [self list.length]
+      }
+      default {
+         die "Expected string or list."
+      }
+   }
 }
 
 // Queries ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 function reverse list {
-   var new-list = (list)
-   var last-index = [(count list) - 1]
-   for i = 0 to last-index {
+   var new-list (list)
+   var last-index [(count list) - 1]
+   for i from 0 to last-index {
       [new-list += [list @ [last-index - i]]]
    }
    return new-list
 }
 
 function where list func {
-   var new-list = (list)
-   foreach x in list {
+   var new-list (list)
+   for x in list {
       if (true? (func x)) {
          [new-list += x]
       }
@@ -184,8 +223,8 @@ function where list func {
 }
 
 function select list func {
-   var new-list = (list)
-   foreach x in list {
+   var new-list (list)
+   for x in list {
       [new-list += (func x)]
    }
    return new-list
@@ -202,11 +241,11 @@ function any list {
 // Each bucket is a list of pairs.
 // Each pair is a two-element list: (list key value)
 
-var DICT-BUCKET-COUNT = 37
+var DICT-BUCKET-COUNT 37
 
 function dict {
    var x = (list)
-   for i = 1 to DICT_BUCKET_COUNT {
+   for i from 1 to DICT-BUCKET-COUNT {
       [x += nil]
    }
    return x
@@ -214,13 +253,13 @@ function dict {
 
 // returns nil if the key does not exist in the dict.
 function dict.get self key {
-   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
-   var bucket = [self @ bucket-index]
+   var bucket-index [(hash key) % DICT-BUCKET-COUNT]
+   var bucket [self @ bucket-index]
    if [bucket nil?] {
       return nil
    } else {
-      foreach pair in bucket {
-         var pair-key = [pair @ 0]
+      for pair in bucket {
+         var pair-key [pair @ 0]
          if [pair-key = key] {
             return [pair @ 1]
          }
@@ -231,15 +270,15 @@ function dict.get self key {
 
 // returns true if a value was overwritten, false if not.
 function dict.set! self key value {
-   var new-pair = (list key value)
-   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
-   var bucket = [self @ bucket-index]
+   var new-pair (list key value)
+   var bucket-index [(hash key) % DICT-BUCKET-COUNT]
+   var bucket [self @ bucket-index]
    if [bucket nil?] {
-      set bucket = (list new-pair)
+      set bucket (list new-pair)
       [self @= bucket-index bucket]
    } else {
       // If the key already exists then overwrite it.
-      foreach pair at i in bucket {
+      for pair at i in bucket {
          if [[pair @ 0] = key] {
             [bucket @= i new-pair]
             return true
@@ -251,10 +290,10 @@ function dict.set! self key value {
 }
 
 function dict.remove! self key {
-   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
-   var bucket = [self @ bucket-index]
+   var bucket-index [(hash key) % DICT-BUCKET-COUNT]
+   var bucket [self @ bucket-index]
    if (not [bucket nil?]) {
-      foreach pair at i in bucket {
+      for pair at i in bucket {
          if [[pair @ 0] = key] {
             [bucket list.remove-at! i]
             return true
@@ -285,11 +324,60 @@ function hashset-remove self key {
    [self dict.remove! key]
 }
 
-// Globals ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// chain //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var TYPE-NIL = 0
-var TYPE-INT = 1
-var TYPE-DOUBLE = 2
-var TYPE-BOOL = 3
-var TYPE-STRING = 4
-var TYPE-LIST = 5
+// Structure:
+// A doubly-linked list: (list head-node count)
+// Each node: (list value prev next)
+
+function chain {
+   return (list nil 0)
+}
+var chain.HEAD 0 // chain-node or nil
+var chain.COUNT 1 // int
+
+function chain-node value prev next {
+   return (list value prev next)
+}
+var chain-node.VALUE 0 // any
+var chain-node.PREV 1 // chain-node or nil
+var chain-node.NEXT 2 // chain-node or nil
+
+function chain.push! self value {
+   var old-head [self @ chain.HEAD]
+   var new-head (chain-node value nil old-head)
+   [self @= chain.HEAD new-head]
+   if (non-nil? old-head) {
+      [old-head @= chain-node.PREV new-head]
+   }
+   [self @= chain.COUNT [[self @ chain.COUNT] + 1]]
+}
+
+function chain.pop! self {
+   var old-head [self @ chain.HEAD]
+   if (nil? old-head) {
+      return nil
+   } else {
+      var new-head [head @ chain-node.NEXT]
+      [self @= chain.HEAD new-head]
+      if (non-nil? new-head) {
+         [new-head @= chain-node.PREV nil]
+      }
+      [self @= chain.COUNT [[self @ chain.COUNT] - 1]]
+      return [old-head @ chain-node.VALUE]
+   }
+}
+
+function chain.remove! self node {
+   var prev [node @ chain-node.PREV]
+   var next [node @ chain-node.NEXT]
+   if (nil? prev) { // this is the head node
+      [self @= chain.HEAD next]
+   } else { // this is a middle or tail node
+      [prev @= chain.NEXT node]
+   }
+   if (non-nil? next) {
+      [next @= chain.PREV prev]
+   }
+   [self @= chain.COUNT [[self @ chain.COUNT] - 1]]
+}

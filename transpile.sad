@@ -1,0 +1,72 @@
+// SAD-to-C Transpiler
+// Copyright (c) 2015, Brian Luft.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+// following conditions are met:
+//
+// - Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+// disclaimer.
+// - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+// following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+// USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+//* Constants *********************************************************************************************************
+
+// Node types
+var NODE-ROOT = 1
+var NODE-FRAME = 2
+var NODE-VAR-SLOT = 3
+var NODE-PROGRAM = 4
+var NODE-FUNCTION = 5
+var NODE-BODY = 6
+var NODE-CALL = 7
+var NODE-VAR = 8
+var NODE-SET = 9
+var NODE-IF = 10
+var NODE-ELSEIF = 11
+var NODE-FOR = 12
+var NODE-FOREACH = 13
+var NODE-WHILE = 14
+var NODE-DO = 15
+var NODE-SWITCH = 16
+var NODE-CASE = 17
+var NODE-RETURN = 18
+var NODE-DIE = 19
+var NODE-INT_LIT = 20
+var NODE-DOUBLE_LIT = 21
+var NODE-BOOL_LIT = 22
+var NODE-STRING_LIT = 23
+var NODE-NIL_LIT = 24
+var NODE-VAR_REF = 25
+var NODE-QUERY = 26
+var NODE-QUERY_STEP = 27
+var NODE-QUERY_PRED = 28
+
+//* AST ***************************************************************************************************************
+
+var ast.TYPE = 0
+
+function ast.program env functions statements { 
+   return (list NODE-PROGRAM env functions statements) 
+}
+var ast.program.ENV = 1
+var ast.program.FUNCTIONS = 2
+var ast.program.STATEMENTS = 3
+
+function ast.function env function-name parameter-names body intrinsic? {
+   return (list NODE-FUNCTION env function-name parameter-names body intrinsic?)
+}
+var ast.function.ENV = 1
+var ast.function.FUNCTION-NAME = 2
+var ast.function.PARAMETER-NAMES = 3
+var ast.function.BODY = 4
+var ast.function.INTRINSIC? = 5
+

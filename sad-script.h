@@ -109,9 +109,7 @@ enum SdTokenType_e {
    SdTokenType_CLOSE_BRACKET,
    SdTokenType_OPEN_BRACE,
    SdTokenType_CLOSE_BRACE,
-   SdTokenType_PIPE,
    SdTokenType_COLON,
-   SdTokenType_EQUAL,
    SdTokenType_IDENTIFIER,
    SdTokenType_FUNCTION,
    SdTokenType_VAR,
@@ -120,8 +118,8 @@ enum SdTokenType_e {
    SdTokenType_ELSE,
    SdTokenType_ELSEIF,
    SdTokenType_FOR,
+   SdTokenType_FROM,
    SdTokenType_TO,
-   SdTokenType_FOREACH,
    SdTokenType_AT,
    SdTokenType_IN,
    SdTokenType_WHILE,
@@ -133,7 +131,8 @@ enum SdTokenType_e {
    SdTokenType_DIE,
    SdTokenType_INTRINSIC,
    SdTokenType_NIL,
-   SdTokenType_ARROW
+   SdTokenType_ARROW,
+   SdTokenType_QUERY
 };
 
 enum SdNodeType_e {
@@ -148,7 +147,6 @@ enum SdNodeType_e {
    SdNodeType_BODY,
    
    /* Statements */
-   SdNodeType_STATEMENT,
    SdNodeType_CALL, /* also an expression */
    SdNodeType_VAR,
    SdNodeType_SET,
@@ -260,6 +258,9 @@ bool           SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchComp
                                       ^-- sorted by name
    VariableSlot:
       (list VAR_SLOT name:Str payload:Value)
+
+   Closure: (shows up as a payload)
+      (list CLOSURE context:Frame (list param-name:String ...) function-node:Function)
 */
 
 SdEnv*         SdEnv_New(void);
@@ -329,11 +330,8 @@ SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
       (list NIL_LIT)
       (list CALL        function-name:Str      (list Expr ...))
       (list VAR_REF     identifier:Str)        
-      (list QUERY       Expr                   (list QueryStep ...))
-   QueryStep:                                  
-      (list QUERY_STEP  function-name:Str      (list arg:Expr ...)    QueryPred?)
-   QueryPred:                                  
-      (list QUERY_PRED  param-name:Str         Expression)
+      (list QUERY       Expr                   (list Call ...))
+      -- may also be FUNCTION
    Body:                                       
       (list BODY        (list Statement ...))  
 */
@@ -439,10 +437,6 @@ SdValue_r      SdAst_QueryStep_New(SdEnv_r env, SdString* function_name, SdList*
 SdString_r     SdAst_QueryStep_FunctionName(SdValue_r self);
 SdList_r       SdAst_QueryStep_Arguments(SdValue_r self);
 SdValue_r      SdAst_QueryStep_Predicate(SdValue_r self); /* may be null */
-
-SdValue_r      SdAst_QueryPred_New(SdEnv_r env, SdString* parameter_name, SdValue_r expr);
-SdString_r     SdAst_QueryPred_ParameterName(SdValue_r self);
-SdValue_r      SdAst_QueryPred_Expr(SdValue_r self);
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet*    SdValueSet_New(void);

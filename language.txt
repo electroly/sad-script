@@ -2,21 +2,23 @@
 
 // non-terminals
 <program> ::= (<function> | <statement>)*
-<function> ::= INTRINSIC? FUNCTION (IDENTIFIER | EQUAL) IDENTIFIER* <body>
+<function> ::= INTRINSIC? FUNCTION IDENTIFIER IDENTIFIER* <body>
 <body> ::= OPEN_BRACE <statement>* CLOSE_BRACE
-<expression> ::= INT_LIT | DOUBLE_LIT | BOOL_LIT | STRING_LIT | NIL | <call> | <infix-call> | IDENTIFIER | <query>
-<call> ::= OPEN_PAREN IDENTIFIER IDENTIFIER* CLOSE_PAREN
+<expression> ::= INT_LIT | DOUBLE_LIT | BOOL_LIT | STRING_LIT | NIL | <call> | <infix-call> | IDENTIFIER | <query> | <closure>
+<call> ::= OPEN_PAREN IDENTIFIER <expression>* CLOSE_PAREN
 <infix-call> ::= OPEN_BRACKET <expression> IDENTIFIER <expression>* CLOSE_BRACKET
-<query> ::= OPEN_PAREN PIPE <expression> <query-step>* PIPE CLOSE_PAREN
-<query-step> ::= ARROW IDENTIFIER <expression>* <query-pred>?
-<query-pred> ::= COLON IDENTIFIER <expression>
-<statement> ::= 
-   <call> | <infix-call> | <var> | <set> | <if> | <for> | <for-each> | <while> | <do> | <switch> | <return> | <die>
-<var> ::= VAR IDENTIFIER EQUAL <expression>
-<set> ::= SET IDENTIFIER EQUAL <expression>
+<query> ::= QUERY OPEN_PAREN <expression> <query-step>* CLOSE_PAREN
+<query-step> ::= ARROW IDENTIFIER <expression>*
+<statement> ::= <call> | <infix-call> | <var> | <set> | <if> | <for> | <while> | <do> | <switch> | <return> | <die>
+<var> ::= VAR IDENTIFIER <expression>
+<set> ::= SET IDENTIFIER <expression>
+<closure> ::= COLON
+   (IDENTIFIER | (OPEN_PAREN IDENTIFIER* CLOSE_PAREN))
+   (<expression> | <body>)
 <if> ::= IF <expression> <body> (ELSEIF <expression> <body>)* (ELSE <body>)?
-<for> ::= FOR IDENTIFIER EQUAL <expression> TO <expression> <body>
-<foreach> ::= FOREACH IDENTIFIER (AT IDENTIFIER)? IN <expression> <body>
+<for> ::= 
+   (FOR IDENTIFIER FROM <expression> TO <expression> <body>) | 
+   (FOR IDENTIFIER (AT IDENTIFIER)? IN <expression> <body>) 
 <while> ::= WHILE <expression> <body>
 <do> ::= DO <body> WHILE <expression>
 <switch> ::= SWITCH <expression> OPEN_BRACE (CASE <expression> <body>)* (DEFAULT <body>)? CLOSE_BRACE
@@ -34,9 +36,7 @@ OPEN_BRACKET
 CLOSE_BRACKET
 OPEN_BRACE
 CLOSE_BRACE
-PIPE
 COLON
-EQUAL
 IDENTIFIER
 FUNCTION
 VAR
@@ -46,7 +46,6 @@ ELSE
 ELSEIF
 FOR
 TO
-FOREACH
 AT
 IN
 WHILE
@@ -59,3 +58,5 @@ DIE
 INTRINSIC
 NIL
 ARROW
+FROM
+QUERY
