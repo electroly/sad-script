@@ -1,4 +1,4 @@
-/* SAD-Script
+/* SAD-Script Command Line Interpreter
  * Copyright (c) 2015, Brian Luft.
  * All rights reserved.
  *
@@ -30,44 +30,37 @@
 
 #include "sad-script.h"
 
-/* These unit tests leak memory like crazy, but it doesn't matter. */
+int main(int argc, const char* argv[]) {
+   int ret = 0;
+   SdResult result = SdResult_SUCCESS;
+   Sad* sad = NULL;
+   SdString* file_path = NULL;
+   SdString* file_text = NULL;
 
-#define EXPECT(condition) Expect(condition, __LINE__)
-
-void Expect(SdBool condition, int line) {
-   if (!condition) {
-      printf("Failed test on line %d.\n", line);
-      exit(1);
+   if (argc != 2) {
+      fprintf(stderr, "Syntax: sad <script filename>\n");
+      ret = -1;
+      goto end;
    }
-}
 
-#if 0
-void Test_Simple1(void) { /* Program: var a = 5 */
-   SdValue_r program, var_a;
-   SdList_r functions, statements;
-   SdResult error;
-   Sad* sad;
-   SdEnv_r env;
-
-   functions = SdList_New();
-   statements = SdList_New();
    sad = Sad_New();
-   env = Sad_Env(sad);
-   SdList_Append(statements, SdAst_Var_New(env, SdString_FromCStr("a"), SdValue_NewInt(5)));
-   program = SdAst_Program_New(env, functions, statements);
-   SdEnv_AddProgramAst(env, program);
-   error = SdEnv_ExecuteTopLevelStatements(env);
-   EXPECT(error.code == SdErr_SUCCESS);
+   file_path = SdString_FromCStr(argv[1]);
 
-   /* Expect a global variable named "a" with integer value 5. */
-   var_a = SdEnv_GetGlobalVariable(env, SdString_FromCStr("a"));
-   EXPECT(var_a);
-   EXPECT(SdValue_Type(var_a) == SdType_INT);
-   EXPECT(SdValue_GetInt(var_a) == 5);
-}
-#endif
+   if (SdFailed(result = SdFile_ReadAllText(file_path, &file_text))) {
+      fprintf(stderr, "ERROR: %s\n", result.message);
+      ret = -1;
+      goto end;
+   }
 
-int main(void) {
-   /*Test_Simple1();*/
-   return 0;
+   if (SdFailed(result = Sad_ExecuteScript(sad, SdString_CStr(file_text)))) {
+      fprintf(stderr, "ERROR: %s\n", result.message);
+      ret = -1;
+      goto end;
+   }
+   
+end:
+   if (file_text) SdString_Delete(file_text);
+   if (file_path) SdString_Delete(file_path);
+   if (sad) Sad_Delete(sad);
+   return ret;
 }

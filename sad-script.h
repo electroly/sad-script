@@ -84,7 +84,8 @@ typedef enum SdErr_e {
    SdErr_UNDECLARED_VARIABLE,
    SdErr_TYPE_MISMATCH,
    SdErr_ARGUMENT_MISMATCH,
-   SdErr_ARGUMENT_OUT_OF_RANGE
+   SdErr_ARGUMENT_OUT_OF_RANGE,
+   SdErr_CANNOT_OPEN_FILE
 } SdErr;
 
 typedef enum SdType_e {
@@ -248,6 +249,10 @@ void           SdList_Clear(SdList_r self);
 SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context); /* list must be sorted */
 SdBool         SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context);
 SdBool         SdList_Equals(SdList_r a, SdList_r b);
+
+/* SdFile ************************************************************************************************************/
+SdResult       SdFile_WriteAllText(SdString_r file_path, SdString_r text);
+SdResult       SdFile_ReadAllText(SdString_r file_path, SdString** out_text);
 
 /* SdEnv *************************************************************************************************************/
 /*
@@ -436,11 +441,6 @@ SdString_r     SdAst_VarRef_Identifier(SdValue_r self);
 SdValue_r      SdAst_Query_New(SdEnv_r env, SdValue_r initial_expr, SdList* steps);
 SdValue_r      SdAst_Query_InitialExpr(SdValue_r self);
 SdList_r       SdAst_Query_Steps(SdValue_r self);
-
-SdValue_r      SdAst_QueryStep_New(SdEnv_r env, SdString* function_name, SdList* arguments, SdValue_r pred_or_null);
-SdString_r     SdAst_QueryStep_FunctionName(SdValue_r self);
-SdList_r       SdAst_QueryStep_Arguments(SdValue_r self);
-SdValue_r      SdAst_QueryStep_Predicate(SdValue_r self); /* may be null */
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet*    SdValueSet_New(void);

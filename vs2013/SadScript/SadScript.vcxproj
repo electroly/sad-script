@@ -86,7 +86,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\main.c" />
+    <ClCompile Include="..\..\sad.c" />
     <ClCompile Include="..\..\sad-script.c" />
   </ItemGroup>
   <ItemGroup>

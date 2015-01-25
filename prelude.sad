@@ -21,6 +21,7 @@
 import function type-of (x)
 import function hash (x)
 import function to-string (x)
+import function print (x)
 
 // algebraic operators
 import function + (a b)
