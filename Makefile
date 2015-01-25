@@ -1,16 +1,28 @@
-TARGET=sad
-
 CC=gcc
-CFLAGS=-ansi -pedantic -Wall -Werror
+CFLAGS=-ansi -pedantic -Wall -Werror -O2 -x c
 
 LINKER=gcc -o
 LFLAGS=-lm
 
-SOURCES=src/sad.c src/sad-script.c
-OBJECTS=$(SOURCES:src/%.c=obj/%.o)
+SAD_SOURCES=src/sad.c src/sad-script.c
+SAD_OBJECTS=$(SAD_SOURCES:src/%.c=obj/%.o)
 
-bin/$(TARGET): obj bin $(OBJECTS) bin/prelude.sad
-	$(LINKER) $@ $(LFLAGS) $(OBJECTS)
+SAD_TEST_SOURCES=src/sad-test.c
+SAD_TEST_OBJECTS=$(SAD_TEST_SOURCES:src/%.c=obj/%.o)
+
+TESTS=$(wildcard tests/*.sad)
+TESTRESULTS=$(TESTS:tests/%.sad=obj/%.testresult)
+
+all: bin/sad bin/sad-test
+
+bin/sad: obj bin $(SAD_OBJECTS) bin/prelude.sad
+	$(LINKER) $@ $(LFLAGS) $(SAD_OBJECTS)
+
+bin/sad-test: obj bin bin/sad $(SAD_TEST_OBJECTS)
+	$(LINKER) $@ $(LFLAGS) $(SAD_TEST_OBJECTS)
+
+obj/%.o : src/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 bin/prelude.sad:
 	cp src/prelude.sad bin/prelude.sad
@@ -21,11 +33,18 @@ obj:
 bin:
 	mkdir bin
 
-$(OBJECTS): obj/%.o : src/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+cleantests:
+	@rm -f $(TESTRESULTS)
 
-clean:
-	rm -f $(OBJECTS)
+clean: cleantests
+	@rm -f $(SAD_OBJECTS)
 
 distclean: clean
-	rm -f bin/$(TARGET)
+	@rm -f bin/sad bin/sad.exe
+	@rm -f bin/prelude.sad
+
+tests: cleantests bin/sad bin/sad-test $(TESTRESULTS)
+
+$(TESTRESULTS): 
+	@bin/sad $(@:obj/%.testresult=tests/%.sad) > $@
+	@bin/sad-test $(@:obj/%.testresult=tests/%.expect) $@ $(@:obj/%.testresult=%)
