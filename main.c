@@ -34,7 +34,7 @@
 
 #define EXPECT(condition) Expect(condition, __LINE__)
 
-void Expect(bool condition, int line) {
+void Expect(SdBool condition, int line) {
    if (!condition) {
       printf("Failed test on line %d.\n", line);
       exit(1);

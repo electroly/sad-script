@@ -27,13 +27,11 @@
 
 #include <stdlib.h>
 
-/* stdbool.h is not part of C89 but we want to be compatible with projects building against later C versions, so
-   don't clobber bool/true/false with our own definitions. */
-#if !defined(__bool_true_false_are_defined) && !defined(bool)
-#define bool int
-#define false 0
-#define true 1
-#endif
+/* stdbool.h is not part of C89 but we want to be compatible with client projects targeting later versions of C or 
+   C++, so don't clobber bool/true/false with our own definitions. */
+typedef int SdBool;
+#define SdFalse 0
+#define SdTrue 1
 
 #ifdef _MSC_VER
 #pragma warning(pop) /* start showing warnings again */
@@ -42,15 +40,12 @@
 #endif
 
 /*********************************************************************************************************************/
-typedef enum SdErr_e SdErr;
-typedef enum SdType_e SdType;
-typedef enum SdTokenType_e SdTokenType;
-typedef enum SdNodeType_e SdNodeType;
 
 /* Raw pointer: ownership is being transferred.
    _r suffix: a pointer is being borrowed only; ownership is not transferred. */
 typedef struct SdResult_s SdResult;
 typedef struct SdSearchResult_s SdSearchResult;
+typedef union SdIntDoublePun_u SdIntDoublePun;
 typedef struct Sad_s Sad;
 typedef struct Sad_s* Sad_r;
 typedef struct SdString_s SdString;
@@ -79,15 +74,20 @@ typedef struct SdEngine_s SdEngine;
 typedef struct SdEngine_s* SdEngine_r;
 
 /* Data Structures ***************************************************************************************************/
-enum SdErr_e {
+typedef enum SdErr_e {
    SdErr_SUCCESS = 0,
+   SdErr_INTERPRETER_BUG,
+   SdErr_DIED,
    SdErr_NAME_COLLISION,
    SdErr_UNEXPECTED_EOF,
    SdErr_UNEXPECTED_TOKEN,
-   SdErr_UNDECLARED_VARIABLE
-};
+   SdErr_UNDECLARED_VARIABLE,
+   SdErr_TYPE_MISMATCH,
+   SdErr_ARGUMENT_MISMATCH,
+   SdErr_ARGUMENT_OUT_OF_RANGE
+} SdErr;
 
-enum SdType_e {
+typedef enum SdType_e {
    /* These numeric values are returned by (type-of) and must not change. */
    SdType_NIL = 0,
    SdType_INT = 1,
@@ -95,9 +95,9 @@ enum SdType_e {
    SdType_BOOL = 3,
    SdType_STRING = 4,
    SdType_LIST = 5
-};
+} SdType;
 
-enum SdTokenType_e {
+typedef enum SdTokenType_e {
    SdTokenType_NONE = 0, /* indicates the lack of a token */
    SdTokenType_INT_LIT,
    SdTokenType_DOUBLE_LIT,
@@ -129,21 +129,22 @@ enum SdTokenType_e {
    SdTokenType_DEFAULT,
    SdTokenType_RETURN,
    SdTokenType_DIE,
-   SdTokenType_INTRINSIC,
+   SdTokenType_IMPORT,
    SdTokenType_NIL,
    SdTokenType_ARROW,
    SdTokenType_QUERY
-};
+} SdTokenType;
 
-enum SdNodeType_e {
+typedef enum SdNodeType_e {
    /* Environment */
    SdNodeType_ROOT,
    SdNodeType_FRAME,
    SdNodeType_VAR_SLOT,
+   SdNodeType_CLOSURE,
 
    /* AST */
    SdNodeType_PROGRAM,
-   SdNodeType_FUNCTION,
+   SdNodeType_FUNCTION, /* also an expression */
    SdNodeType_BODY,
    
    /* Statements */
@@ -168,10 +169,8 @@ enum SdNodeType_e {
    SdNodeType_STRING_LIT,
    SdNodeType_NIL_LIT,
    SdNodeType_VAR_REF,
-   SdNodeType_QUERY,
-   SdNodeType_QUERY_STEP,
-   SdNodeType_QUERY_PRED
-};
+   SdNodeType_QUERY
+} SdNodeType;
 
 struct SdResult_s {
    SdErr code;
@@ -180,7 +179,7 @@ struct SdResult_s {
 
 struct SdSearchResult_s {
    int index; /* could be one past the end of the list if search name > everything */
-   bool exact; /* true = index is an exact match, false = index is the next highest match */
+   SdBool exact; /* true = index is an exact match, false = index is the next highest match */
 };
 
 typedef int (*SdSearchCompareFunc)(SdValue_r lhs, void* context);
@@ -189,12 +188,12 @@ typedef int (*SdSearchCompareFunc)(SdValue_r lhs, void* context);
 extern SdResult SdResult_SUCCESS;
 
 SdResult       SdFail(SdErr code, const char* message);
-bool           SdFailed(SdResult result);
+SdResult       SdFailWithStringSuffix(SdErr code, const char* message, SdString_r suffix);
+SdBool         SdFailed(SdResult result);
 
 /* Sad ***************************************************************************************************************/
 Sad*           Sad_New(void);
 void           Sad_Delete(Sad* self);
-SdResult       Sad_CallFunction(Sad_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return);
 SdResult       Sad_ExecuteScript(Sad_r self, const char* code);
 SdEnv_r        Sad_Env(Sad_r self);
 
@@ -203,9 +202,9 @@ SdString*      SdString_New(void);
 SdString*      SdString_FromCStr(const char* cstr);
 void           SdString_Delete(SdString* self);
 const char*    SdString_CStr(SdString_r self);
-bool           SdString_Equals(SdString_r a, SdString_r b);
-bool           SdString_EqualsCStr(SdString_r a, const char* b);
-int            SdString_Length(SdString_r self);
+SdBool         SdString_Equals(SdString_r a, SdString_r b);
+SdBool         SdString_EqualsCStr(SdString_r a, const char* b);
+size_t         SdString_Length(SdString_r self);
 int            SdString_Compare(SdString_r a, SdString_r b);
 
 /* SdStringBuf *******************************************************************************************************/
@@ -223,16 +222,18 @@ int            SdStringBuf_Length(SdStringBuf_r self);
 SdValue*       SdValue_NewNil(void);
 SdValue*       SdValue_NewInt(int x);
 SdValue*       SdValue_NewDouble(double x);
-SdValue*       SdValue_NewBool(bool x);
+SdValue*       SdValue_NewBool(SdBool x);
 SdValue*       SdValue_NewString(SdString* x);
 SdValue*       SdValue_NewList(SdList* x);
 void           SdValue_Delete(SdValue* self);
 SdType         SdValue_Type(SdValue_r self);
 int            SdValue_GetInt(SdValue_r self);
 double         SdValue_GetDouble(SdValue_r self);
-bool           SdValue_GetBool(SdValue_r self);
+SdBool         SdValue_GetBool(SdValue_r self);
 SdString_r     SdValue_GetString(SdValue_r self);
 SdList_r       SdValue_GetList(SdValue_r self);
+SdBool         SdValue_Equals(SdValue_r a, SdValue_r b);
+int            SdValue_Hash(SdValue_r self);
 
 /* SdList ************************************************************************************************************/
 SdList*        SdList_New(void);
@@ -245,17 +246,18 @@ size_t         SdList_Count(SdList_r self);
 SdValue_r      SdList_RemoveAt(SdList_r self, size_t index);
 void           SdList_Clear(SdList_r self);
 SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context); /* list must be sorted */
-bool           SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context);
+SdBool         SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context);
+SdBool         SdList_Equals(SdList_r a, SdList_r b);
 
 /* SdEnv *************************************************************************************************************/
 /*
    Environment structure:
    Root: 
-      (list ROOT (list Function ...) (list Statement ...) top:StackFrame bottom:StackFrame)
+      (list ROOT (list Function ...) (list Statement ...) bottom:Frame)
                   ^-- sorted by name
    Frame:
-      (list FRAME parent:Frame? (list VariableSlot ...) is-function:Bool)
-                                      ^-- sorted by name
+      (list FRAME parent:Frame? (list VariableSlot ...))
+                                 ^-- sorted by name
    VariableSlot:
       (list VAR_SLOT name:Str payload:Value)
 
@@ -269,32 +271,34 @@ SdValue_r      SdEnv_Root(SdEnv_r self);
 SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
 void           SdEnv_CollectGarbage(SdEnv_r self);
-void           SdEnv_PushFrame(SdEnv_r self);
-void           SdEnv_PopFrame(SdEnv_r self);
-void           SdEnv_Assign(SdEnv_r self, SdString_r name, SdValue_r value);
-SdValue_r      SdEnv_FindStackVariable(SdEnv_r self, SdString_r name);
+SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdString_r name, SdValue_r value);
+SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
 
 SdValue_r      SdEnv_BoxNil(SdEnv_r env);
 SdValue_r      SdEnv_BoxInt(SdEnv_r env, int x);
 SdValue_r      SdEnv_BoxDouble(SdEnv_r env, double x);
-SdValue_r      SdEnv_BoxBool(SdEnv_r env, bool x);
+SdValue_r      SdEnv_BoxBool(SdEnv_r env, SdBool x);
 SdValue_r      SdEnv_BoxString(SdEnv_r env, SdString* x);
 SdValue_r      SdEnv_BoxList(SdEnv_r env, SdList* x);
 
 SdValue_r      SdEnv_Root_New(SdEnv_r env);
 SdList_r       SdEnv_Root_Functions(SdValue_r self);
 SdList_r       SdEnv_Root_Statements(SdValue_r self);
-SdValue_r      SdEnv_Root_TopFrame(SdValue_r self);
 SdValue_r      SdEnv_Root_BottomFrame(SdValue_r self);
 
-SdValue_r      SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null, bool is_function);
-SdValue_r      SdEnv_Frame_Parent(SdValue_r self); /* may be null */
+SdValue_r      SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null);
+SdValue_r      SdEnv_Frame_Parent(SdValue_r self); /* may be nil */
 SdList_r       SdEnv_Frame_VariableSlots(SdValue_r self);
-bool           SdEnv_Frame_IsFunction(SdValue_r self);
 
 SdValue_r      SdEnv_VariableSlot_New(SdEnv_r env, SdString_r name, SdValue_r value);
 SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
 SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
+void           SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value);
+
+SdValue_r      SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node);
+SdValue_r      SdEnv_Closure_Frame(SdValue_r self);
+SdList_r       SdEnv_Closure_ParameterNames(SdValue_r self);
+SdValue_r      SdEnv_Closure_FunctionNode(SdValue_r self);
 
 /* SdAst *************************************************************************************************************/
 /*
@@ -305,7 +309,7 @@ SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
    Program:                                    
       (list PROGRAM     (list Function ...)    (list Statement ...))
    Function:                                   
-      (list FUNCTION    name:Str               (list param:Str ...)   Body               is-intrinsic:Bool)
+      (list FUNCTION    name:Str               (list param:Str ...)   Body               is-imported:Bool)
    Statement:                                  
       (list CALL        function-name:Str      (list Expr...))
       (list VAR         variable-name:Str      value:Expr)
@@ -343,11 +347,11 @@ SdList_r       SdAst_Program_Functions(SdValue_r self);
 SdList_r       SdAst_Program_Statements(SdValue_r self);
 
 SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
-                  bool is_intrinsic);
+                  SdBool is_imported);
 SdString_r     SdAst_Function_Name(SdValue_r self);
 SdValue_r      SdAst_Function_Body(SdValue_r self);
-SdList_r       SdAst_Function_ParameterNames(SdValue_r self);
-bool           SdAst_Function_IsIntrinsic(SdValue_r self);
+SdValue_r      SdAst_Function_ParameterNames(SdValue_r self);
+SdBool         SdAst_Function_IsImported(SdValue_r self);
 
 SdValue_r      SdAst_Body_New(SdEnv_r env, SdList* statements);
 SdList_r       SdAst_Body_Statements(SdValue_r self);
@@ -418,7 +422,7 @@ SdValue_r      SdAst_IntLit_Value(SdValue_r self);
 SdValue_r      SdAst_DoubleLit_New(SdEnv_r env, double value);
 SdValue_r      SdAst_DoubleLit_Value(SdValue_r self);
 
-SdValue_r      SdAst_BoolLit_New(SdEnv_r env, bool value);
+SdValue_r      SdAst_BoolLit_New(SdEnv_r env, SdBool value);
 SdValue_r      SdAst_BoolLit_Value(SdValue_r self);
 
 SdValue_r      SdAst_StringLit_New(SdEnv_r env, SdString* value);
@@ -441,8 +445,8 @@ SdValue_r      SdAst_QueryStep_Predicate(SdValue_r self); /* may be null */
 /* SdValueSet ********************************************************************************************************/
 SdValueSet*    SdValueSet_New(void);
 void           SdValueSet_Delete(SdValueSet* self);
-bool           SdValueSet_Add(SdValueSet_r self, SdValue_r item); /* true = added, false = already exists */
-bool           SdValueSet_Has(SdValueSet_r self, SdValue_r item);
+SdBool         SdValueSet_Add(SdValueSet_r self, SdValue_r item); /* true = added, false = already exists */
+SdBool         SdValueSet_Has(SdValueSet_r self, SdValue_r item);
 
 /* SdChain ***********************************************************************************************************/
 SdChain*       SdChain_New(void);
@@ -468,10 +472,10 @@ const char*    SdToken_Text(SdToken_r self);
 SdScanner*     SdScanner_New(void);
 void           SdScanner_Delete(SdScanner* self);
 void           SdScanner_Tokenize(SdScanner_r self, const char* text);
-bool           SdScanner_IsEof(SdScanner_r self);
-bool           SdScanner_Peek(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
+SdBool         SdScanner_IsEof(SdScanner_r self);
+SdBool         SdScanner_Peek(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
 SdTokenType    SdScanner_PeekType(SdScanner_r self); /* SdTokenType_NONE if eof */
-bool           SdScanner_Read(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
+SdBool         SdScanner_Read(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
 
 /* SdParser **********************************************************************************************************/
 SdResult       SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* out_program_node);
@@ -479,8 +483,9 @@ SdResult       SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* o
 /* SdEngine **********************************************************************************************************/
 SdEngine*      SdEngine_New(SdEnv_r env);
 void           SdEngine_Delete(SdEngine* self);
-SdResult       SdEngine_ExecuteTopLevelStatements(SdEngine_r self);
-SdResult       SdEngine_Call(SdEngine_r self, SdString_r function_name, SdList_r arguments, SdValue_r* out_return);
+SdResult       SdEngine_ExecuteProgram(SdEngine_r self);
+SdResult       SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_name, SdList_r arguments, 
+                  SdValue_r* out_return);
 
 /*********************************************************************************************************************/
 #ifdef _MSC_VER

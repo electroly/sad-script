@@ -18,31 +18,73 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-intrinsic function + a b {}
-intrinsic function - a b {}
-intrinsic function / a b {}
-intrinsic function * a b {}
-intrinsic function % a b {}
-intrinsic function ^ a b {}
-intrinsic function type-of x {}
-intrinsic function and a b {}
-intrinsic function or a b {}
-intrinsic function not x {}
-intrinsic function << a b {}
-intrinsic function >> a b {}
-intrinsic function list.length self {}
-intrinsic function list.get-at self index {}
-intrinsic function list.set-at! self index value {}
-intrinsic function list.insert-at! self index value {}
-intrinsic function list.remove-at! self index {}
-intrinsic function string.length self {}
-intrinsic function string.eq? a b {}
-intrinsic function string.hash self {}
-intrinsic function string.append! self suffix {}
-intrinsic function int.eq? a b {}
-intrinsic function bool.eq? a b {}
-intrinsic function double.eq? a b {}
-intrinsic function double.hash self {}
+import function type-of (x)
+import function hash (x)
+import function to-string (x)
+
+// algebraic operators
+import function + (a b)
+import function - (a b)
+import function * (a b)
+import function / (a b)
+import function % (a b)
+
+// bitwise operators
+import function bitwise-and (a b)
+import function bitwise-or (a b)
+import function bitwise-xor (a b)
+
+// trigonometric functions
+import function sin (x)
+import function cos (x)
+import function tan (x)
+import function asin (x)
+import function acos (x)
+import function atan (x)
+import function atan2 (y x)
+
+// hyperbolic functions
+import function sinh (x)
+import function cosh (x)
+import function tanh (x)
+
+// exponential and logarithmic functions
+import function exp (x)
+import function log (x)
+import function log10 (x)
+
+// power operators and functions
+import function ** (a b)
+import function sqrt (x)
+
+// rounding functions
+import function ceil (x)
+import function floor (x)
+
+// boolean operators (no short circuiting)
+import function and (a b)
+import function or (a b)
+import function not (x)
+
+// comparison operators
+import function = (a b)
+import function < (a b)
+import function <= (a b)
+import function > (a b)
+import function >= (a b)
+import function << (a b)
+import function >> (a b)
+
+// list functions
+import function list.length (self) 
+import function list.get-at (self index) 
+import function list.set-at! (self index value) 
+import function list.insert-at! (self index value) 
+import function list.remove-at! (self index) 
+
+// string functions
+import function string.length (self) 
+import function string.get-at (self index) 
 
 // Constants //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -55,121 +97,36 @@ var TYPE-LIST 5
 
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function nil? self {
-   return [(type-of self) int.eq? TYPE-NIL]
+function nil? (self) {
+   return [(type-of self) = TYPE-NIL]
 }
 
-function non-nil? self {
+function non-nil? (self) {
    return (not (nil? self))
 }
 
-function zero? self {
-   return [[(type-of self) int.eq? TYPE-INT] and [self int.eq? 0]]
+function zero? (self) {
+   return [[(type-of self) = TYPE-INT] and [self = 0]]
 }
 
-function true? self {
-   return [[(type-of self) int.eq? TYPE-BOOL] and [self bool.eq? true]]
+function true? (self) {
+   return [[(type-of self) = TYPE-BOOL] and [self = true]]
 }
 
-function false? self {
-   return [[(type-of self) int.eq? TYPE-BOOL] and [self bool.eq? false]]
+function false? (self) {
+   return [[(type-of self) = TYPE-BOOL] and [self = false]]
 }
 
-function list.eq? a b {
-   if (not [(list.length a) int.eq? (list.length b)]) {
-      return false
-   } else {
-      for a-item at i in a {
-         var b-item [b @ i]
-         if (not [a-item = b-item]) {
-            return false
-         }
-      }
-      return true
-   }
-}
-
-function list.append! self value {
+function list.append! (self value) {
    var index [[self list.count] - 1]
    [self list.insert-at! index value]
 }
 
-function int.hash self {
-   return self
-}
-
-function list.hash self {
-   var value 0
-   for x at i in self {
-      set value [value ^ [(hash x) * [i + 1]]
-   }
-   return value
-}
-
-function bool.hash self {
-   if [a bool.eq? b] {
-      return 1
-   } else {
-      return 0
-   }
-}
-
-function = a b {
-   var a-type (type-of a)
-   var b-type (type-of b)
-   if (not [a-type int.eq? b-type]) {
-      return false
-   }
-   switch a-type {
-      case TYPE-INT {
-         return [a int.eq? b]
-      }
-      case TYPE-DOUBLE {
-         return [a double.eq? b]
-      }
-      case TYPE-BOOL {
-         return [a bool.eq? b]
-      }
-      case TYPE-STRING {
-         return [a string.eq? b]
-      }
-      case TYPE-LIST {
-         return [a list.eq? b]
-      }
-      default {
-         die "Unknown type ID."
-      }
-   }
-}
-
-function hash self {
-   switch (type-of self) {
-      case TYPE-INT {
-         return [self int.hash]
-      }
-      case TYPE-DOUBLE {
-         return [self double.hash]
-      }
-      case TYPE-BOOL {
-         return [self bool.hash]
-      }
-      case TYPE-STRING {
-         return [self string.hash]
-      }
-      case TYPE-LIST {
-         return [self list.hash]
-      }
-      default {
-         die "Unknown type ID."
-      }
-   }
-}
-
-function += collection item {
+function += (collection item) {
    [collection list.append! item]
 }
 
-function @ self index {
+function @ (self index) {
    switch (type-of self) {
       case TYPE-STRING {
          return [self string.get-at index]
@@ -183,11 +140,11 @@ function @ self index {
    }
 }
 
-function @= self index value {
+function @= (self index value) {
    [collection list.set-at! index value]
 }
 
-function length self {
+function length (self) {
    switch (type-of self) {
       case TYPE-STRING {
          return [self string.length]
@@ -203,7 +160,7 @@ function length self {
 
 // Queries ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function reverse list {
+function reverse (list) {
    var new-list (list)
    var last-index [(count list) - 1]
    for i from 0 to last-index {
@@ -212,7 +169,7 @@ function reverse list {
    return new-list
 }
 
-function where list func {
+function where (list func) {
    var new-list (list)
    for x in list {
       if (true? (func x)) {
@@ -222,7 +179,7 @@ function where list func {
    return new-list
 }
 
-function select list func {
+function select (list func) {
    var new-list (list)
    for x in list {
       [new-list += (func x)]
@@ -230,7 +187,7 @@ function select list func {
    return new-list
 }
 
-function any list {
+function any (list) {
    return [(count list) > 0]
 }
 
@@ -243,7 +200,7 @@ function any list {
 
 var DICT-BUCKET-COUNT 37
 
-function dict {
+function dict () {
    var x = (list)
    for i from 1 to DICT-BUCKET-COUNT {
       [x += nil]
@@ -252,7 +209,7 @@ function dict {
 }
 
 // returns nil if the key does not exist in the dict.
-function dict.get self key {
+function dict.get (self key) {
    var bucket-index [(hash key) % DICT-BUCKET-COUNT]
    var bucket [self @ bucket-index]
    if [bucket nil?] {
@@ -269,7 +226,7 @@ function dict.get self key {
 }
 
 // returns true if a value was overwritten, false if not.
-function dict.set! self key value {
+function dict.set! (self key value) {
    var new-pair (list key value)
    var bucket-index [(hash key) % DICT-BUCKET-COUNT]
    var bucket [self @ bucket-index]
@@ -289,7 +246,7 @@ function dict.set! self key value {
    return false
 }
 
-function dict.remove! self key {
+function dict.remove! (self key) {
    var bucket-index [(hash key) % DICT-BUCKET-COUNT]
    var bucket [self @ bucket-index]
    if (not [bucket nil?]) {
@@ -308,19 +265,19 @@ function dict.remove! self key {
 // Structure: 
 // A dict where all the values are ignored (but happen to be set to true)
 
-function hashset {
+function hashset () {
    return (dict)
 }
 
-function hashset-add self key {
+function hashset-add (self key) {
    return [self dict.set! key true]
 }
 
-function hashset-has? self key {
+function hashset-has? (self key) {
    return (true? [self dict.get key])
 }
 
-function hashset-remove self key {
+function hashset-remove (self key) {
    [self dict.remove! key]
 }
 
@@ -330,20 +287,20 @@ function hashset-remove self key {
 // A doubly-linked list: (list head-node count)
 // Each node: (list value prev next)
 
-function chain {
+function chain () {
    return (list nil 0)
 }
 var chain.HEAD 0 // chain-node or nil
 var chain.COUNT 1 // int
 
-function chain-node value prev next {
+function chain-node (value prev next) {
    return (list value prev next)
 }
 var chain-node.VALUE 0 // any
 var chain-node.PREV 1 // chain-node or nil
 var chain-node.NEXT 2 // chain-node or nil
 
-function chain.push! self value {
+function chain.push! (self value) {
    var old-head [self @ chain.HEAD]
    var new-head (chain-node value nil old-head)
    [self @= chain.HEAD new-head]
@@ -353,7 +310,7 @@ function chain.push! self value {
    [self @= chain.COUNT [[self @ chain.COUNT] + 1]]
 }
 
-function chain.pop! self {
+function chain.pop! (self) {
    var old-head [self @ chain.HEAD]
    if (nil? old-head) {
       return nil
@@ -368,7 +325,7 @@ function chain.pop! self {
    }
 }
 
-function chain.remove! self node {
+function chain.remove! (self node) {
    var prev [node @ chain-node.PREV]
    var next [node @ chain-node.NEXT]
    if (nil? prev) { // this is the head node
