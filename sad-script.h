@@ -292,6 +292,7 @@ SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
 void           SdEnv_CollectGarbage(SdEnv_r self);
 SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue_r value);
 SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
+unsigned long  SdEnv_AllocationCount(SdEnv_r self);
 
 SdValue_r      SdEnv_BoxNil(SdEnv_r env);
 SdValue_r      SdEnv_BoxInt(SdEnv_r env, int x);

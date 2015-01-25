@@ -49,6 +49,9 @@
 #pragma warning(disable: 4127) /* conditional expression is constant */
 #endif
 
+#define SD_NUM_ALLOCATIONS_PER_GC 10000
+   /* run the garbage collector after this many value allocations */
+
 /*********************************************************************************************************************/
 typedef struct SdScannerNode_s SdScannerNode;
 typedef struct SdScannerNode_s* SdScannerNode_r;
@@ -95,6 +98,7 @@ struct SdList_s {
 struct SdEnv_s {
    SdValue_r root; /* contains all living/connected objects */
    SdChain* values_chain; /* contains all objects that haven't been deleted yet */
+   unsigned long allocation_count;
 };
 
 struct SdValueSet_s {
@@ -131,6 +135,7 @@ struct SdScanner_s {
 
 struct SdEngine_s {
    SdEnv_r env;
+   unsigned long last_gc; /* the value of SdEnv_AllocationCount last time the GC was run */
 };
 
 static void* SdAlloc(size_t size);
@@ -310,14 +315,14 @@ static void SdAssertNonEmptyString(SdString_r x) {
 #ifdef SD_DEBUG
 void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
    memset(ptr, 0, size);
-   printf("%x ALLOC -- %s -- Line %d -- %s\n", ptr, s, line, func);
+   printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);
    return ptr;
 }
 
 #define SdDebugAlloc(size, line, s, func) SdDebugAllocCore(malloc(size), size, line, s, func)
 
 void SdDebugFree(void* ptr, int line, const char* s, const char* func) {
-   printf("%x FREE -- %s -- Line %d -- %s\n", ptr, s, line, func);
+   printf("%x FREE -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);
    free(ptr);
 }
 #define SdAlloc(size) SdDebugAlloc(size, __LINE__, #size, __FUNCTION__)
@@ -331,7 +336,7 @@ static void SdDebugDumpValueCore(SdValue_r value, int indent, SdValueSet_r seen)
    indent_str[indent] = 0;
 
    if (SdValueSet_Has(seen, value)) {
-      printf("%s(%x) seen already\n", indent_str, value);
+      printf("%s(%x) seen already\n", indent_str, (unsigned int)value);
       free(indent_str);
       return;
    } else {
@@ -340,23 +345,24 @@ static void SdDebugDumpValueCore(SdValue_r value, int indent, SdValueSet_r seen)
 
    switch (SdValue_Type(value)) {
       case SdType_NIL:
-         printf("%s(%x) nil\n", indent_str, value);
+         printf("%s(%x) nil\n", indent_str, (unsigned int)value);
          break;
       case SdType_INT:
-         printf("%s(%x) %d\n", indent_str, value, SdValue_GetInt(value));
+         printf("%s(%x) %d\n", indent_str, (unsigned int)value, SdValue_GetInt(value));
          break;
       case SdType_DOUBLE:
-         printf("%s(%x) %f\n", indent_str, value, SdValue_GetDouble(value));
+         printf("%s(%x) %f\n", indent_str, (unsigned int)value, SdValue_GetDouble(value));
          break;
       case SdType_BOOL:
-         printf("%s(%x) %s\n", indent_str, value, SdValue_GetBool(value) ? "true" : "false");
+         printf("%s(%x) %s\n", indent_str, (unsigned int)value, SdValue_GetBool(value) ? "true" : "false");
          break;
       case SdType_STRING: {
          SdString_r str;
          const char* cstr;
          str = SdValue_GetString(value);
          cstr = SdString_CStr(str);
-         printf("%s(%x,Str:%x,CStr:%x) \"%s\"\n", indent_str, value, str, cstr, cstr);
+         printf("%s(%x,Str:%x,CStr:%x) \"%s\"\n", indent_str, (unsigned int)value, (unsigned int)str, 
+            (unsigned int)cstr, cstr);
          break;
       }
       case SdType_LIST: {
@@ -364,7 +370,7 @@ static void SdDebugDumpValueCore(SdValue_r value, int indent, SdValueSet_r seen)
          size_t i, count;
          list = SdValue_GetList(value);
          count = SdList_Count(list);
-         printf("%s(%x,Lst:%x) list * %d\n", indent_str, value, list, count);
+         printf("%s(%x,Lst:%x) list * %d\n", indent_str, (unsigned int)value, (unsigned int)list, count);
          for (i = 0; i < count; i++)
             SdDebugDumpValueCore(SdList_GetAt(list, i), indent + 2, seen);
          break;
@@ -385,7 +391,7 @@ static void SdDebugDumpChain(SdChain_r chain) {
    SdChainNode_r node = SdChain_Head(chain);
    printf("CHAIN DUMP:\n");
    while (node) {
-      printf("   (%x) Type %d\n", SdChainNode_Value(node), SdValue_Type(SdChainNode_Value(node)));
+      printf("   (%x) Type %d\n", (unsigned int)SdChainNode_Value(node), SdValue_Type(SdChainNode_Value(node)));
       node = SdChainNode_Next(node);
    }
 }
@@ -1059,7 +1065,7 @@ SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
 
 #ifdef SD_DEBUG
 SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char* func) {
-   printf("%x BOX -- Type %d -- Line %d -- %s\n", value, SdValue_Type(value), line, func);
+   printf("%x BOX -- Type %d -- Line %d -- %s\n", (unsigned int)value, SdValue_Type(value), line, func);
    assert(self);
    assert(value);
 
@@ -1075,10 +1081,7 @@ SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char*
    } while (0);
 
    SdChain_Push(self->values_chain, value);
-
-   if ((SdChain_Count(self->values_chain) % 10000) == 0)
-      SdEnv_CollectGarbage(self);
-
+   self->allocation_count++;
    return value;
 }
 #define SdEnv_AddToGc(self, value) SdEnv_DebugAddToGc(self, value, __LINE__, __FUNCTION__);
@@ -1086,11 +1089,9 @@ SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char*
 SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
    assert(self);
    assert(value);
+
    SdChain_Push(self->values_chain, value);
-
-   if ((SdChain_Count(self->values_chain) % 10000) == 0)
-      SdEnv_CollectGarbage(self);
-
+   self->allocation_count++;
    return value;
 }
 #endif
@@ -1260,6 +1261,11 @@ SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame) {
    } else {
       return NULL;
    }
+}
+
+unsigned long SdEnv_AllocationCount(SdEnv_r self) {
+   assert(self);
+   return self->allocation_count;
 }
 
 SdValue_r SdEnv_BoxNil(SdEnv_r env) {
@@ -2469,7 +2475,7 @@ SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out
    SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
    parameter_names = SdList_New();
    while (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
-      SdString* param_name;
+      SdString* param_name = NULL;
       SdParser_READ_IDENTIFIER(param_name);
       SdList_Append(parameter_names, SdEnv_BoxString(env, param_name));
    }
@@ -3417,6 +3423,15 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
    assert(statement);
    assert(out_return);
    assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+
+#ifdef SD_DEBUG
+   /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
+   SdEnv_CollectGarbage(self->env);
+#else
+   /* run the garbage collector if necessary (more than SD_NUM_ALLOCATIONS_PER_GC allocations since the last GC) */
+   if (SdEnv_AllocationCount(self->env) - self->last_gc > SD_NUM_ALLOCATIONS_PER_GC)
+      SdEnv_CollectGarbage(self->env);
+#endif
 
    switch (SdAst_NodeType(statement)) {
       case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, out_return);
