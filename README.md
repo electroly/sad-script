@@ -33,4 +33,4 @@ function reversed-even-numbers (low high) {
 }
 ```
 
-The interpreter is written in C89 and compiles cleanly under `gcc -ansi -pedantic -Wall -Werror`, TinyCC (`tcc`), clang, and SVC 2013.  It is known to work in Windows 7 and Mac OS X 10.9, and should work on any other platform supporting ANSI C.  The interpreter can be embedded in client applications simply by including one `.c` and one `.h` file in the project.  No need to link a library or anything difficult.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.
+The interpreter is written in C89 and compiles cleanly under `gcc -ansi -pedantic -Wall -Werror`, TinyCC (`tcc`), clang, and MSVC 2013.  It has been tested in Windows 7, OS X 10.9, and Debian Linux 7.7.  It should work on any other platform supporting ANSI C.  The interpreter can be embedded in client applications simply by including `sad-script.c` and `sad-script.h` file in the project.  No need to link a library or anything difficult.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.
