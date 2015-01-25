@@ -3419,6 +3419,8 @@ SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, 
 }
 
 SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+   SdValue_r discarded_result;
+
    assert(self);
    assert(frame);
    assert(statement);
@@ -3435,7 +3437,7 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
 #endif
 
    switch (SdAst_NodeType(statement)) {
-      case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, out_return);
+      case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, &discarded_result);
       case SdNodeType_VAR: return SdEngine_ExecuteVar(self, frame, statement);
       case SdNodeType_SET: return SdEngine_ExecuteSet(self, frame, statement);
       case SdNodeType_IF: return SdEngine_ExecuteIf(self, frame, statement, out_return);
@@ -4158,7 +4160,7 @@ SdEngine_INTRINSIC_END
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Print)
    SdUnreferenced(self);
    if (a_type == SdType_STRING) {
-      puts(SdString_CStr(SdValue_GetString(a_val)));
+      printf("%s", SdString_CStr(SdValue_GetString(a_val)));
       *out_return = a_val;
    }
 SdEngine_INTRINSIC_END

@@ -14,6 +14,13 @@
       <Platform>Win32</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\sad-script.c" />
+    <ClCompile Include="..\..\src\sad.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\sad-script.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{5D19CD32-2571-42BA-8A52-14815BB52A36}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
@@ -119,13 +126,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\sad.c" />
-    <ClCompile Include="..\..\sad-script.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\sad-script.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
