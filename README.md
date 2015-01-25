@@ -2,11 +2,7 @@ SAD-Script
 ----------
 
 <p align="center">
-"S-Expressions and Dashes"
-
-\- or -
-
-"Simple and Dumb"
+"S-Expressions and Dashes" or "Simple and Dumb"
 </p>
 
 A dynamically-typed, interpreted, garbage-collected language with 5 data types: int, double, bool, string, list.  There are no semicolons, and whitespace is insignificant.  Identifiers can contain anything except parentheses, braces, brackets, double quotes, and colons.  Identifiers must contain at least one character that isn't a digit and isn't a period, in order to distinguish identifiers from integer and double literals.
