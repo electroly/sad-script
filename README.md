@@ -25,10 +25,10 @@ function fizz-buzz (x) {
 }
 ```
 
-There is a convenient syntax for lambda functions (with closures), as well as a pipeline syntax similar to F#'s `|>` operator.  Programmers familiar with C#'s Enumerable extension methods and its conventional method chaining syntax will find this syntax familiar.
+There is a convenient syntax for lambda functions (with closures), as well as a pipelined query syntax similar to F#'s `|>` operator.  Programmers familiar with C#'s Enumerable extension methods and its conventional method chaining syntax will find this syntax familiar.  Unlike the C# extension methods, the calls in a query are executed eagerly rather than lazily.
 
 ```
-function reversed-even-numbers (low, high) {
+function reversed-even-numbers (low high) {
 	return query (range low high -> where :x (zero? [x % 2]) -> reverse)
 }
 ```
