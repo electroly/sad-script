@@ -162,6 +162,7 @@ static SdBool SdScanner_IsIntLit(const char* text);
 
 static SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message);
 static SdResult SdParser_FailEof(void);
+static SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, SdTokenType actual_type);
 static const char* SdParser_TypeString(SdTokenType type);
 static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type, SdToken_r* out_token);
 static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
@@ -2333,7 +2334,7 @@ SdResult SdParser_FailEof(void) {
    return SdFail(SdErr_UNEXPECTED_EOF, "Unexpected EOF.");
 }
 
-SdResult SdParser_FailType(SdToken_r token, SdNodeType expected_type, SdNodeType actual_type) {
+SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, SdTokenType actual_type) {
    SdStringBuf* buf;
    SdResult result;
 
