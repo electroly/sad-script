@@ -18,8 +18,16 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
+/* define SD_DEBUG for non-portable Visual C++ debugging (very slow) */
+
 #ifdef _MSC_VER
 #pragma warning(push, 0) /* ignore warnings in system headers */
+#endif
+
+#ifdef SD_DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
 #endif
 
 #include <stdio.h>
@@ -36,6 +44,11 @@ int main(int argc, const char* argv[]) {
    Sad* sad = NULL;
    SdString* file_path = NULL;
    SdString* file_text = NULL;
+   
+#ifdef SD_DEBUG
+   /* dump memory leaks when the program exits */
+   _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+#endif
 
    if (argc != 2) {
       fprintf(stderr, "Syntax: sad <script filename>\n");

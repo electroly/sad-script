@@ -7,10 +7,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SadScript", "SadScript.vcxp
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug Leaks|Win32 = Debug Leaks|Win32
 		Debug|Win32 = Debug|Win32
 		Release|Win32 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5D19CD32-2571-42BA-8A52-14815BB52A36}.Debug Leaks|Win32.ActiveCfg = Debug Leaks|Win32
+		{5D19CD32-2571-42BA-8A52-14815BB52A36}.Debug Leaks|Win32.Build.0 = Debug Leaks|Win32
 		{5D19CD32-2571-42BA-8A52-14815BB52A36}.Debug|Win32.ActiveCfg = Debug|Win32
 		{5D19CD32-2571-42BA-8A52-14815BB52A36}.Debug|Win32.Build.0 = Debug|Win32
 		{5D19CD32-2571-42BA-8A52-14815BB52A36}.Release|Win32.ActiveCfg = Release|Win32

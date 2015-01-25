@@ -85,7 +85,10 @@ typedef enum SdErr_e {
    SdErr_TYPE_MISMATCH,
    SdErr_ARGUMENT_MISMATCH,
    SdErr_ARGUMENT_OUT_OF_RANGE,
-   SdErr_CANNOT_OPEN_FILE
+   SdErr_CANNOT_OPEN_FILE,
+
+   SdErr_FIRST = SdErr_SUCCESS,
+   SdErr_LAST = SdErr_CANNOT_OPEN_FILE
 } SdErr;
 
 typedef enum SdType_e {
@@ -138,39 +141,50 @@ typedef enum SdTokenType_e {
 
 typedef enum SdNodeType_e {
    /* Environment */
-   SdNodeType_ROOT,
-   SdNodeType_FRAME,
-   SdNodeType_VAR_SLOT,
-   SdNodeType_CLOSURE,
+   SdNodeType_ROOT = 0,
+   SdNodeType_FRAME = 1,
+   SdNodeType_VAR_SLOT = 2,
+   SdNodeType_CLOSURE = 3,
 
-   /* AST */
-   SdNodeType_PROGRAM,
-   SdNodeType_FUNCTION, /* also an expression */
-   SdNodeType_BODY,
-   
-   /* Statements */
-   SdNodeType_CALL, /* also an expression */
-   SdNodeType_VAR,
-   SdNodeType_SET,
-   SdNodeType_IF,
-   SdNodeType_ELSEIF,
-   SdNodeType_FOR,
-   SdNodeType_FOREACH,
-   SdNodeType_WHILE,
-   SdNodeType_DO,
-   SdNodeType_SWITCH,
-   SdNodeType_CASE,
-   SdNodeType_RETURN,
-   SdNodeType_DIE,
+   /* Blocks */
+   SdNodeType_PROGRAM = 4,
+   SdNodeType_BODY = 5,
+
+   /* Block or expression (depending on the context) */
+   SdNodeType_FUNCTION = 6,
 
    /* Expressions */
-   SdNodeType_INT_LIT,
-   SdNodeType_DOUBLE_LIT,
-   SdNodeType_BOOL_LIT,
-   SdNodeType_STRING_LIT,
-   SdNodeType_NIL_LIT,
-   SdNodeType_VAR_REF,
-   SdNodeType_QUERY
+   SdNodeType_INT_LIT = 7,
+   SdNodeType_DOUBLE_LIT = 8,
+   SdNodeType_BOOL_LIT = 9,
+   SdNodeType_STRING_LIT = 10,
+   SdNodeType_NIL_LIT = 11,
+   SdNodeType_VAR_REF = 12,
+   SdNodeType_QUERY = 13,
+
+   /* Statement or expression (depending on the context) */
+   SdNodeType_CALL = 14,
+
+   /* Statements */
+   SdNodeType_VAR = 15,
+   SdNodeType_SET = 16,
+   SdNodeType_IF = 17,
+   SdNodeType_ELSEIF = 18,
+   SdNodeType_FOR = 19,
+   SdNodeType_FOREACH = 20,
+   SdNodeType_WHILE = 21,
+   SdNodeType_DO = 22,
+   SdNodeType_SWITCH = 23,
+   SdNodeType_CASE = 24,
+   SdNodeType_RETURN = 25,
+   SdNodeType_DIE = 26,
+
+   SdNodeType_BLOCKS_FIRST = SdNodeType_PROGRAM,
+   SdNodeType_BLOCKS_LAST = SdNodeType_FUNCTION,
+   SdNodeType_EXPRESSIONS_FIRST = SdNodeType_FUNCTION,
+   SdNodeType_EXPRESSIONS_LAST = SdNodeType_CALL,
+   SdNodeType_STATEMENTS_FIRST = SdNodeType_CALL,
+   SdNodeType_STATEMENTS_LAST = SdNodeType_DIE
 } SdNodeType;
 
 struct SdResult_s {
@@ -276,7 +290,7 @@ SdValue_r      SdEnv_Root(SdEnv_r self);
 SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
 void           SdEnv_CollectGarbage(SdEnv_r self);
-SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdString_r name, SdValue_r value);
+SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue_r value);
 SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
 
 SdValue_r      SdEnv_BoxNil(SdEnv_r env);
@@ -295,7 +309,7 @@ SdValue_r      SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null);
 SdValue_r      SdEnv_Frame_Parent(SdValue_r self); /* may be nil */
 SdList_r       SdEnv_Frame_VariableSlots(SdValue_r self);
 
-SdValue_r      SdEnv_VariableSlot_New(SdEnv_r env, SdString_r name, SdValue_r value);
+SdValue_r      SdEnv_VariableSlot_New(SdEnv_r env, SdValue_r name, SdValue_r value);
 SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
 SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
 void           SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value);
@@ -353,7 +367,7 @@ SdList_r       SdAst_Program_Statements(SdValue_r self);
 
 SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
                   SdBool is_imported);
-SdString_r     SdAst_Function_Name(SdValue_r self);
+SdValue_r      SdAst_Function_Name(SdValue_r self);
 SdValue_r      SdAst_Function_Body(SdValue_r self);
 SdValue_r      SdAst_Function_ParameterNames(SdValue_r self);
 SdBool         SdAst_Function_IsImported(SdValue_r self);
@@ -366,7 +380,7 @@ SdString_r     SdAst_Call_FunctionName(SdValue_r self);
 SdList_r       SdAst_Call_Arguments(SdValue_r self);
 
 SdValue_r      SdAst_Var_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr);
-SdString_r     SdAst_Var_VariableName(SdValue_r self);
+SdValue_r      SdAst_Var_VariableName(SdValue_r self);
 SdValue_r      SdAst_Var_ValueExpr(SdValue_r self);
 
 SdValue_r      SdAst_Set_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr);
@@ -386,15 +400,15 @@ SdValue_r      SdAst_ElseIf_Body(SdValue_r self);
 
 SdValue_r      SdAst_For_New(SdEnv_r env, SdString* variable_name, SdValue_r start_expr, SdValue_r stop_expr,
                   SdValue_r body);
-SdString_r     SdAst_For_VariableName(SdValue_r self);
+SdValue_r      SdAst_For_VariableName(SdValue_r self);
 SdValue_r      SdAst_For_StartExpr(SdValue_r self);
 SdValue_r      SdAst_For_StopExpr(SdValue_r self);
 SdValue_r      SdAst_For_Body(SdValue_r self);
 
 SdValue_r      SdAst_ForEach_New(SdEnv_r env, SdString* iter_name, SdString* index_name_or_null, 
                   SdValue_r haystack_expr, SdValue_r body);
-SdString_r     SdAst_ForEach_IterName(SdValue_r self);
-SdString_r     SdAst_ForEach_IndexName(SdValue_r self); /* may be null */
+SdValue_r      SdAst_ForEach_IterName(SdValue_r self);
+SdValue_r      SdAst_ForEach_IndexName(SdValue_r self); /* may be null */
 SdValue_r      SdAst_ForEach_HaystackExpr(SdValue_r self);
 SdValue_r      SdAst_ForEach_Body(SdValue_r self);
 
