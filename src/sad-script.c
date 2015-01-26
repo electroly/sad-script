@@ -1966,8 +1966,7 @@ void SdScanner_Delete(SdScanner* self) {
 }
 
 void SdScanner_Tokenize(SdScanner_r self, const char* text) {
-   SdBool in_string = SdFalse;
-   SdBool in_escape = SdFalse;
+   SdBool in_string = SdFalse, in_escape = SdFalse, in_comment = SdFalse;
    size_t i, text_length;
    int source_line = 1;
    SdStringBuf* current_text;
@@ -1977,10 +1976,17 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
    current_text = SdStringBuf_New();
    text_length = strlen(text);
    for (i = 0; i < text_length; i++) {
-      char ch = text[i];
+      char ch, peek;
+      ch = text[i];
+      peek = text[i + 1];
 
       if (ch == '\n') {
          source_line++;
+         in_comment = SdFalse;
+      }
+
+      if (in_comment) {
+         continue;
       }
 
       if (in_string) {
@@ -2041,6 +2047,14 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
             break;
       }
 
+      if (ch == '/' && peek == '/') {
+         if (SdStringBuf_Length(current_text) > 0) {
+            SdScanner_AppendToken(self, source_line, SdStringBuf_CStr(current_text));
+            SdStringBuf_Clear(current_text);
+         }
+         in_comment = SdTrue;
+         continue;
+      }
       
       switch (ch) {
          /* These characters (a subset of the characters above) are their own tokens, even when jammed together with

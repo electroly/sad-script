@@ -1,2 +1,3 @@
+//Hello world
 import function print (x)
 (print "Hello world")

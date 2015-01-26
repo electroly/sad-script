@@ -47,4 +47,4 @@ tests: cleantests bin/sad bin/sad-test $(TESTRESULTS)
 
 $(TESTRESULTS): 
 	@bin/sad $(@:obj/%.testresult=tests/%.sad) > $@
-	@bin/sad-test $(@:obj/%.testresult=tests/%.expect) $@ $(@:obj/%.testresult=%)
+	@bin/sad-test $(@:obj/%.testresult=tests/%.sad) $@ $(@:obj/%.testresult=%)
