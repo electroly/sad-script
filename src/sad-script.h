@@ -264,6 +264,7 @@ void           SdList_Clear(SdList_r self);
 SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context); /* list must be sorted */
 SdBool         SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context);
 SdBool         SdList_Equals(SdList_r a, SdList_r b);
+SdList*        SdList_Clone(SdList_r self);
 
 /* SdFile ************************************************************************************************************/
 SdResult       SdFile_WriteAllText(SdString_r file_path, SdString_r text);

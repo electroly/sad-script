@@ -1,0 +1,38 @@
+//(nil)
+//123
+//-321
+//12.230000
+//-12.230000
+//0.110000
+//-0.110000
+//11.000000
+//-11.000000
+//true
+//false
+//test
+//(list)
+
+// nil
+(println (to-string nil))
+
+// ints
+(println (to-string 123))
+(println (to-string -321))
+
+// doubles
+(println (to-string 12.23))
+(println (to-string -12.23))
+(println (to-string .11))
+(println (to-string -.11))
+(println (to-string 11.))
+(println (to-string -11.))
+
+// bools
+(println (to-string true))
+(println (to-string false))
+
+// strings
+(println (to-string "test"))
+
+// lists
+(println (to-string (list 1 2 3)))

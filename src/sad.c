@@ -86,7 +86,9 @@ int main(int argc, const char* argv[]) {
    prelude_path = SdString_FromCStr(prelude);
 
    if (SdFailed(result = SdFile_ReadAllText(prelude_path, &prelude_text))) {
-      fprintf(stderr, "ERROR: Failed to read the prelude script file.\n%s\n", result.message);
+      fprintf(stderr, "ERROR: Could not find the prelude file.  Please specify the path to the prelude file using the "
+         "environment variable SAD_PRELUDE, the --prelude command line switch, or by placing the prelude in the "
+         "current directory.\n");
       ret = -1;
       goto end;
    }

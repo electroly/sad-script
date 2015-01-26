@@ -1,0 +1,33 @@
+//2
+//2
+//2
+//2
+//2
+//2
+//1.100000
+//1.000000
+//0.100000
+//-1.100000
+//-1.000000
+//-0.100000
+//2
+//2.000000
+//3.000000
+
+(println (to-string (type-of 1.1)))
+(println (to-string (type-of 1.)))
+(println (to-string (type-of .1)))
+(println (to-string (type-of -1.1)))
+(println (to-string (type-of -1.)))
+(println (to-string (type-of -.1)))
+(println (to-string 1.1))
+(println (to-string 1.))
+(println (to-string .1))
+(println (to-string -1.1))
+(println (to-string -1.))
+(println (to-string -.1))
+(println (to-string TYPE-DOUBLE))
+var d 2.0
+var e [1.0 + d]
+(println (to-string d))
+(println (to-string e))

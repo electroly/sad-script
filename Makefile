@@ -1,51 +1,54 @@
+# CC may be overridden on the command line.  Try gcc or tcc.
 CC=gcc
-CFLAGS=-ansi -pedantic -Wall -Werror -O2 -x c
 
-LINKER=gcc -o
-LFLAGS=-lm
+ifeq ($(CC),gcc)
+	CFLAGS=-ansi -pedantic -Wall -Werror -O2 -x c
+else
+	CFLAGS=
+endif
+
+ifeq ($(CC),gcc)
+	LFLAGS=-lm
+else
+	LFLAGS=
+endif
 
 SAD_SOURCES=src/sad.c src/sad-script.c
-SAD_OBJECTS=$(SAD_SOURCES:src/%.c=obj/%.o)
 
 SAD_TEST_SOURCES=src/sad-test.c
-SAD_TEST_OBJECTS=$(SAD_TEST_SOURCES:src/%.c=obj/%.o)
 
 TESTS=$(wildcard tests/*.sad)
-TESTRESULTS=$(TESTS:tests/%.sad=obj/%.testresult)
+TESTRESULTS=$(TESTS:tests/%.sad=testresults/%.testresult)
 
 all: bin/sad bin/sad-test
 
-bin/sad: obj bin $(SAD_OBJECTS) bin/prelude.sad
-	$(LINKER) $@ $(LFLAGS) $(SAD_OBJECTS)
+bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
+	$(CC) $(CFLAGS) $(LFLAGS) $(SAD_SOURCES) -o $@
 
-bin/sad-test: obj bin bin/sad $(SAD_TEST_OBJECTS)
-	$(LINKER) $@ $(LFLAGS) $(SAD_TEST_OBJECTS)
-
-obj/%.o: src/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
+	$(CC) $(CFLAGS) $(LFLAGS) $(SAD_TEST_SOURCES) -o $@
 
 bin/prelude.sad: src/prelude.sad
 	cp src/prelude.sad bin/prelude.sad
 
-obj:
-	mkdir obj
-
 bin:
 	mkdir bin
+
+testresults:
+	mkdir testresults
 
 cleantests:
 	@rm -f $(TESTRESULTS)
 
 clean: cleantests
-	@rm -f $(SAD_OBJECTS)
-
-distclean: clean
 	@rm -f bin/sad bin/sad.exe
 	@rm -f bin/sad-test bin/sad-test.exe
 	@rm -f bin/prelude.sad
 
-tests: cleantests bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
+test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 
 $(TESTRESULTS): 
-	@bin/sad --prelude bin/prelude.sad $(@:obj/%.testresult=tests/%.sad) > $@
-	@bin/sad-test $(@:obj/%.testresult=tests/%.sad) $@ $(@:obj/%.testresult=%)
+	@echo "-----------------------------------------------------"
+	@echo -n "$(@:testresults/%.testresult=%): "
+	@bin/sad --prelude bin/prelude.sad $(@:testresults/%.testresult=tests/%.sad) > $@
+	@bin/sad-test $(@:testresults/%.testresult=tests/%.sad) $@

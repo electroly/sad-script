@@ -1,0 +1,11 @@
+//3
+//3
+//3.000000
+//3.000000
+//HelloWorld
+
+(println (to-string [1 + 2]))
+(println (to-string (+ 1 2)))
+(println (to-string [1. + 2.]))
+(println (to-string (+ 1. 2.)))
+(println ["Hello" + "World"])

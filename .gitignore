@@ -2,7 +2,7 @@ main.exe
 a.exe
 sad.exe
 bin/
-obj/
+testresults/
 
 #################
 ## Eclipse

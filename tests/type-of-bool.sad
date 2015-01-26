@@ -1,0 +1,15 @@
+//3
+//3
+//true
+//false
+//true
+//false
+
+(println (to-string (type-of true)))
+(println (to-string (type-of false)))
+(println (to-string true))
+(println (to-string false))
+var f true
+var g (not f)
+(println (to-string f))
+(println (to-string g))

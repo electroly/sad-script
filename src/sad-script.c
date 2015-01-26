@@ -246,6 +246,7 @@ static SdResult SdEngine_Intrinsic_GreaterThan(SdEngine_r self, SdList_r argumen
 static SdResult SdEngine_Intrinsic_GreaterThanEquals(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ShiftLeft(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ShiftRight(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_List(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListLength(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListGetAt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListSetAt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
@@ -991,6 +992,14 @@ SdBool SdList_Equals(SdList_r a, SdList_r b) {
          return SdFalse;
 
    return SdTrue;
+}
+
+SdList* SdList_Clone(SdList_r self) {
+   SdList* clone = SdList_New();
+   clone->count = self->count;
+   clone->values = SdAlloc(sizeof(SdValue_r) * self->count);
+   memcpy(clone->values, self->values, sizeof(SdValue_r) * self->count);
+   return clone;
 }
 
 /* SdFile ************************************************************************************************************/
@@ -3281,14 +3290,15 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    closure = SdEnv_VariableSlot_Value(closure_slot);
    if (SdAst_NodeType(closure) != SdNodeType_CLOSURE)
       return SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
+   function = SdEnv_Closure_FunctionNode(closure);
 
-   /* ensure that the argument list matches the parameter list */
+   /* ensure that the argument list matches the parameter list. skip the check for intrinsics since they are more 
+      flexible and will do the check themselves. */
    param_names = SdEnv_Closure_ParameterNames(closure);
-   if (SdList_Count(arguments) != SdList_Count(param_names))
+   if (!SdAst_Function_IsImported(function) && SdList_Count(arguments) != SdList_Count(param_names))
       return SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Wrong number of arguments to function: ", function_name);
 
    /* if this is an intrinsic then call it now; no frame needed */
-   function = SdEnv_Closure_FunctionNode(closure);
    if (SdAst_Function_IsImported(function))
       return SdEngine_CallIntrinsic(self, function_name, arguments, out_return);
 
@@ -3890,6 +3900,7 @@ SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r argum
       case 'l':
          INTRINSIC("log", SdEngine_Intrinsic_Log);
          INTRINSIC("log10", SdEngine_Intrinsic_Log10);
+         INTRINSIC("list", SdEngine_Intrinsic_List);
          INTRINSIC("list.length", SdEngine_Intrinsic_ListLength);
          INTRINSIC("list.get-at", SdEngine_Intrinsic_ListGetAt);
          INTRINSIC("list.set-at!", SdEngine_Intrinsic_ListSetAt);
@@ -4132,6 +4143,15 @@ SdEngine_INTRINSIC_INTDOUBLE2_BOOL(SdEngine_Intrinsic_GreaterThan, a > b)
 SdEngine_INTRINSIC_INTDOUBLE2_BOOL(SdEngine_Intrinsic_GreaterThanEquals, a >= b)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftLeft, a << b)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftRight, a >> b)
+
+SdResult SdEngine_Intrinsic_List(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) {
+   assert(self);
+   assert(arguments);
+   assert(out_return);
+
+   *out_return = SdEnv_BoxList(self->env, SdList_Clone(arguments));
+   return SdResult_SUCCESS;
+}
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ListLength)
    if (a_type == SdType_LIST) {

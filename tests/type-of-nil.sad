@@ -1,0 +1,8 @@
+//0
+//0
+//(nil)
+
+(println (to-string (type-of nil)))
+(println (to-string TYPE-NIL))
+var a nil
+(println (to-string a))

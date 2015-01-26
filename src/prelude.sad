@@ -77,6 +77,7 @@ import function << (a b)
 import function >> (a b)
 
 // list functions
+import function list ()
 import function list.length (self) 
 import function list.get-at (self index) 
 import function list.set-at! (self index value) 
@@ -118,8 +119,13 @@ function false? (self) {
    return [[(type-of self) = TYPE-BOOL] and [self = false]]
 }
 
+function println (x) {
+   (print x)
+   (print "\n")
+}
+
 function list.append! (self value) {
-   var index [[self list.count] - 1]
+   var index [[self list.length] - 1]
    [self list.insert-at! index value]
 }
 

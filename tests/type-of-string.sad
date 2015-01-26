@@ -1,0 +1,6 @@
+//4
+//hello
+
+(println (to-string (type-of "hello")))
+var h "hello"
+(println h)

@@ -95,39 +95,36 @@ int main(int argc, const char* argv[]) {
    char* expected = NULL;
    const char* actual_file_path;
    char* actual = NULL;
-   const char* name;
 
-   if (argc != 4) {
-      fprintf(stderr, "Syntax: sad-test <.sad file> <actual file> <name>");
+   if (argc != 3) {
+      fprintf(stderr, "Syntax: sad-test <.sad file> <actual file>\n");
       ret = -1;
       goto end;
    }
 
    expected_file_path = argv[1];
    actual_file_path = argv[2];
-   name = argv[3];
 
    expected = ReadExpectedFile(expected_file_path);
    if (!expected) {
-      fprintf(stderr, "Could not open the expected file.");
+      fprintf(stderr, "Could not open the expected file.\n");
       ret = -1;
       goto end;
    }
 
    actual = ReadActualFile(actual_file_path);
    if (!actual) {
-      fprintf(stderr, "Could not open the actual file.");
+      fprintf(stderr, "Could not open the actual file.\n");
       ret = -1;
       goto end;
    }
 
    if (strcmp(expected, actual) != 0) {
-      printf("\n-FAIL- %s\n", name);
-      printf("Expected:\n   \"%s\"\n", expected);
-      printf("Actual:\n   \"%s\"\n", actual);
-      puts("------\n");
+      printf("FAIL\n");
+      printf("************ Expected:\n\"%s\"\n", expected);
+      printf("************ Actual:\n\"%s\"\n", actual);
    } else {
-      printf("PASS %s\n", name);
+      printf("PASS\n");
    }
 
 end:
