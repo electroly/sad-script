@@ -77,10 +77,8 @@ int main(int argc, const char* argv[]) {
    }
 
    if (!prelude) {
-      fprintf(stderr, "ERROR: Could not find \"prelude.sad\". Specify using --prelude or in the SAD_PRELUDE "
-         "environment variable.\n");
-      ret = -1;
-      goto end;
+      /* try in the current directory */
+      prelude = "prelude.sad";
    }
 
    sad = Sad_New();
