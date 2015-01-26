@@ -2,7 +2,7 @@
 //0
 //(nil)
 
-(println (to-string (type-of nil)))
-(println (to-string TYPE-NIL))
+(println (type-of nil))
+(println TYPE-NIL)
 var a nil
-(println (to-string a))
+(println a)

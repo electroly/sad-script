@@ -1,0 +1,11 @@
+//0.877583
+//0.540302
+//0.070737
+//1.000000
+//0.540302
+
+(println (cos 0.5))
+(println (cos 1.0))
+(println (cos 1.5))
+(println (cos 0.0))
+(println (cos -1.0))

@@ -1137,7 +1137,7 @@ void SdEnv_Delete(SdEnv* self) {
 #endif
    /* Allow the garbage collector to clean up the tree starting at root. */
    self->root = NULL;
-   SdEnv_CollectGarbage(self);
+   SdEnv_CollectGarbage(self, NULL, 0);
    assert(SdChain_Count(self->values_chain) == 0); /* shouldn't be anything left */
    SdChain_Delete(self->values_chain);
    SdFree(self);
@@ -1182,9 +1182,10 @@ SdResult SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node) {
    return SdResult_SUCCESS;
 }
 
-void SdEnv_CollectGarbage(SdEnv_r self) {
+void SdEnv_CollectGarbage(SdEnv_r self, SdValue_r extra_in_use[], size_t extra_in_use_count) {
    SdValueSet* connected_values;
    SdChainNode_r value_node;
+   size_t i;
 
    assert(self);
    connected_values = SdValueSet_New();
@@ -1193,6 +1194,9 @@ void SdEnv_CollectGarbage(SdEnv_r self) {
    /* mark */
    if (self->root)
       SdEnv_CollectGarbage_FindConnectedValues(self->root, connected_values);
+
+   for (i = 0; i < extra_in_use_count; i++)
+      SdValueSet_Add(connected_values, extra_in_use[i]);
 
    /* sweep */
    while (value_node) {
@@ -3118,6 +3122,7 @@ end:
       assert(self); \
       assert(arguments); \
       assert(out_return); \
+      *out_return = NULL; \
       if (SdFailed(result = SdEngine_Args1(arguments, &a_val, &a_type))) \
          return result;
 #define SdEngine_INTRINSIC_START_ARGS2(name) \
@@ -3128,6 +3133,7 @@ end:
       assert(self); \
       assert(arguments); \
       assert(out_return); \
+      *out_return = NULL; \
       if (SdFailed(result = SdEngine_Args2(arguments, &a_val, &a_type, &b_val, &b_type))) \
          return result;
 #define SdEngine_INTRINSIC_START_ARGS3(name) \
@@ -3138,6 +3144,7 @@ end:
       assert(self); \
       assert(arguments); \
       assert(out_return); \
+      *out_return = NULL; \
       if (SdFailed(result = SdEngine_Args3(arguments, &a_val, &a_type, &b_val, &b_type, &c_val, &c_type))) \
          return result;
 #define SdEngine_INTRINSIC_END \
@@ -3149,33 +3156,43 @@ end:
 #define SdEngine_INTRINSIC_INT2(name, expr) \
    SdEngine_INTRINSIC_START_ARGS2(name) \
    if (a_type == SdType_INT && b_type == SdType_INT) { \
-      int a = SdValue_GetInt(a_val); \
-      int b = SdValue_GetInt(b_val); \
+      int a, b; \
+      a = SdValue_GetInt(a_val); \
+      b = SdValue_GetInt(b_val); \
       *out_return = SdEnv_BoxInt(self->env, expr); \
    } \
    SdEngine_INTRINSIC_END
 #define SdEngine_INTRINSIC_INTDOUBLE2(name, expr) \
    SdEngine_INTRINSIC_START_ARGS2(name) \
    if (a_type == SdType_DOUBLE && b_type == SdType_DOUBLE) { \
-      double a = SdValue_GetDouble(a_val); \
-      double b = SdValue_GetDouble(b_val); \
+      double a, b; \
+      a = SdValue_GetDouble(a_val); \
+      b = SdValue_GetDouble(b_val); \
       *out_return = SdEnv_BoxDouble(self->env, expr); \
    } else if (a_type == SdType_INT && b_type == SdType_INT) { \
-      int a = SdValue_GetInt(a_val); \
-      int b = SdValue_GetInt(b_val); \
+      int a, b; \
+      a = SdValue_GetInt(a_val); \
+      b = SdValue_GetInt(b_val); \
       *out_return = SdEnv_BoxInt(self->env, expr); \
    } \
    SdEngine_INTRINSIC_END
-#define SdEngine_INTRINSIC_INTDOUBLE2_BOOL(name, expr) \
+#define SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(name, int_double_expr, string_expr) \
    SdEngine_INTRINSIC_START_ARGS2(name) \
    if (a_type == SdType_DOUBLE && b_type == SdType_DOUBLE) { \
-      double a = SdValue_GetDouble(a_val); \
-      double b = SdValue_GetDouble(b_val); \
-      *out_return = SdEnv_BoxBool(self->env, expr); \
+      double a, b; \
+      a = SdValue_GetDouble(a_val); \
+      b = SdValue_GetDouble(b_val); \
+      *out_return = SdEnv_BoxBool(self->env, int_double_expr); \
    } else if (a_type == SdType_INT && b_type == SdType_INT) { \
-      int a = SdValue_GetInt(a_val); \
-      int b = SdValue_GetInt(b_val); \
-      *out_return = SdEnv_BoxBool(self->env, expr); \
+      int a, b; \
+      a = SdValue_GetInt(a_val); \
+      b = SdValue_GetInt(b_val); \
+      *out_return = SdEnv_BoxBool(self->env, int_double_expr); \
+   } else if (a_type == SdType_STRING && b_type == SdType_STRING) { \
+      SdString_r a, b; \
+      a = SdValue_GetString(a_val); \
+      b = SdValue_GetString(b_val); \
+      *out_return = SdEnv_BoxBool(self->env, string_expr); \
    } \
    SdEngine_INTRINSIC_END
 #define SdEngine_INTRINSIC_DOUBLE1(name, expr) \
@@ -3472,6 +3489,7 @@ SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, 
    count = SdList_Count(statements);
    for (i = 0; i < count; i++) {
       statement = SdList_GetAt(statements, i);
+      *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteStatement(self, frame, statement, out_return)))
          return result;
       if (*out_return) /* a return statement breaks the body */
@@ -3483,6 +3501,7 @@ SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, 
 
 SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdValue_r discarded_result;
+   SdBool gc_needed = SdFalse;
 
    assert(self);
    assert(frame);
@@ -3492,12 +3511,17 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
 
 #ifdef SD_DEBUG
    /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
-   SdEnv_CollectGarbage(self->env);
+   gc_needed = SdTrue;
 #else
    /* run the garbage collector if necessary (more than SD_NUM_ALLOCATIONS_PER_GC allocations since the last GC) */
-   if (SdEnv_AllocationCount(self->env) - self->last_gc > SD_NUM_ALLOCATIONS_PER_GC)
-      SdEnv_CollectGarbage(self->env);
+   gc_needed = (SdEnv_AllocationCount(self->env) - self->last_gc) > SD_NUM_ALLOCATIONS_PER_GC;
 #endif
+
+   if (gc_needed) {
+      SdValue_r extra_in_use[1];
+      extra_in_use[0] = frame;
+      SdEnv_CollectGarbage(self->env, extra_in_use, 1);
+   }
 
    switch (SdAst_NodeType(statement)) {
       case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, &discarded_result);
@@ -3667,6 +3691,7 @@ SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r stateme
       loop_frame = SdEnv_Frame_New(self->env, frame);
       if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, SdEnv_BoxInt(self->env, i))))
          return result;
+      *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
          return result;
       if (*out_return) /* a return statement inside the loop will break from the loop */
@@ -3712,6 +3737,7 @@ SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r sta
          if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
             return result;
       }
+      *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
          return result;
       if (*out_return) /* a return statement inside the loop will break from the loop */
@@ -3744,6 +3770,7 @@ SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_r state
          break;
 
       loop_frame = SdEnv_Frame_New(self->env, frame);
+      *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
          return result;
       if (*out_return) /* a return statement inside the loop will break from the loop */
@@ -3769,6 +3796,7 @@ SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r statemen
 
    while (SdTrue) {
       loop_frame = SdEnv_Frame_New(self->env, frame);
+      *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
          return result;
       if (*out_return) /* a return statement inside the loop will break from the loop */
@@ -4017,8 +4045,8 @@ SdResult SdEngine_Args3(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type
    assert(out_c);
    assert(out_c_type);
 
-   if (SdList_Count(arguments) != 2)
-      return SdFail(SdErr_ARGUMENT_MISMATCH, "Expected 2 arguments.");
+   if (SdList_Count(arguments) != 3)
+      return SdFail(SdErr_ARGUMENT_MISMATCH, "Expected 3 arguments.");
    *out_a = SdList_GetAt(arguments, 0);
    *out_a_type = SdValue_Type(*out_a);
    *out_b = SdList_GetAt(arguments, 1);
@@ -4137,10 +4165,14 @@ SdEngine_INTRINSIC_BOOL2(SdEngine_Intrinsic_And, a && b)
 SdEngine_INTRINSIC_BOOL2(SdEngine_Intrinsic_Or, a || b)
 SdEngine_INTRINSIC_BOOL1(SdEngine_Intrinsic_Not, !a)
 SdEngine_INTRINSIC_VALUE2(SdEngine_Intrinsic_Equals, SdEnv_BoxBool(self->env, SdValue_Equals(a, b)))
-SdEngine_INTRINSIC_INTDOUBLE2_BOOL(SdEngine_Intrinsic_LessThan, a < b)
-SdEngine_INTRINSIC_INTDOUBLE2_BOOL(SdEngine_Intrinsic_LessThanEquals, a <= b)
-SdEngine_INTRINSIC_INTDOUBLE2_BOOL(SdEngine_Intrinsic_GreaterThan, a > b)
-SdEngine_INTRINSIC_INTDOUBLE2_BOOL(SdEngine_Intrinsic_GreaterThanEquals, a >= b)
+SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_LessThan, a < b, 
+   strcmp(SdString_CStr(a), SdString_CStr(b)) < 0)
+SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_LessThanEquals, a <= b, 
+   strcmp(SdString_CStr(a), SdString_CStr(b)) <= 0)
+SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_GreaterThan, a > b, 
+   strcmp(SdString_CStr(a), SdString_CStr(b)) > 0)
+SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_GreaterThanEquals, a >= b, 
+   strcmp(SdString_CStr(a), SdString_CStr(b)) >= 0)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftLeft, a << b)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftRight, a >> b)
 
@@ -4190,7 +4222,7 @@ SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListInsertAt)
 
       a_list = SdValue_GetList(a_val);
       b_int = SdValue_GetInt(b_val);
-      if (b_int < 0 || (size_t)b_int >= SdList_Count(a_list))
+      if (b_int < 0 || (size_t)b_int > SdList_Count(a_list))
          return SdFail(SdErr_ARGUMENT_OUT_OF_RANGE, "Index is out of range.");
       SdList_InsertAt(a_list, b_int, c_val);
       *out_return = c_val;

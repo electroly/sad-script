@@ -1,0 +1,21 @@
+//false
+//true
+//true
+//false
+//true
+//true
+//false
+//true
+//true
+
+(println [1 <= 0])
+(println [1 <= 1])
+(println [1 <= 2])
+
+(println [1.1 <= 0.0])
+(println [1.1 <= 1.1])
+(println [1.1 <= 2.2])
+
+(println ["abc" <= "aaa"])
+(println ["abc" <= "abc"])
+(println ["abc" <= "cba"])

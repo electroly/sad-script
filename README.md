@@ -12,11 +12,14 @@ Control flow structures are JavaScript-like, with mandatory braces.  Function ca
 ```
 function fizz-buzz (x) {
    for i from 1 to 100 {
-      if [(zero? [i % 3]) and (zero? [i % 5])] {
+      var multiple-of-3 (zero? [i % 3])
+      var multiple-of-5 (zero? [i % 5])
+      
+      if [multiple-of-3 and multiple-of-5] {
          (print "FizzBuzz\n")
-      } elseif (zero? [i % 3]) {
+      } elseif multiple-of-3 {
          (print "Fizz\n")
-      } elseif (zero? [i % 5]) {
+      } elseif multiple-of-5 {
          (print "Buzz\n")
       } else {
          (print (to-string i))
@@ -28,8 +31,8 @@ function fizz-buzz (x) {
 There is a convenient syntax for lambda functions (with closures), as well as a pipelined query syntax similar to F#'s `|>` operator.  Programmers familiar with C#'s Enumerable extension methods and its conventional method chaining syntax will find this syntax familiar.  Unlike the C# extension methods, the calls in a query are executed eagerly rather than lazily.
 
 ```
-function reversed-even-numbers (low high) {
-	return query (range low high -> where :x (zero? [x % 2]) -> reverse)
+function reversed-odd-numbers (low high) {
+	return query ((range low high) -> where :x [[x % 2] = 1] -> reverse)
 }
 ```
 

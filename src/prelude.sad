@@ -119,13 +119,17 @@ function false? (self) {
    return [[(type-of self) = TYPE-BOOL] and [self = false]]
 }
 
+function printv (x) {
+   (print (to-string x))
+}
+
 function println (x) {
-   (print x)
+   (printv x)
    (print "\n")
 }
 
 function list.append! (self value) {
-   var index [[self list.length] - 1]
+   var index (list.length self)
    [self list.insert-at! index value]
 }
 
@@ -149,6 +153,10 @@ function @ (self index) {
 
 function @= (self index value) {
    [collection list.set-at! index value]
+}
+
+function != (a b) {
+   return (not [a = b])
 }
 
 function length (self) {

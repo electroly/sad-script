@@ -5,11 +5,10 @@
 //99
 
 var a (list)
-(println (to-string (list.length a)))
+(println (list.length a))
 (list.append! a 88)
-(println (to-string (list.length a)))
-(println (to-string [a @ 0]))
+(println (list.length a))
+(println [a @ 0])
 [a list.append! 99]
-(println (to-string (list.length a)))
-(println (to-string [a @ 1]))
-
+(println (list.length a))
+(println [a @ 1])

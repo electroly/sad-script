@@ -3,7 +3,7 @@
 //-1.000000
 //-1.000000
 
-(println (to-string [1 - 2]))
-(println (to-string (- 1 2)))
-(println (to-string [1. - 2.]))
-(println (to-string (- 1. 2.)))
+(println [1 - 2])
+(println (- 1 2))
+(println [1. - 2.])
+(println (- 1. 2.))

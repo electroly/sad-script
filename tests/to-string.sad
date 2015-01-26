@@ -13,26 +13,26 @@
 //(list)
 
 // nil
-(println (to-string nil))
+(println nil)
 
 // ints
-(println (to-string 123))
-(println (to-string -321))
+(println 123)
+(println -321)
 
 // doubles
-(println (to-string 12.23))
-(println (to-string -12.23))
-(println (to-string .11))
-(println (to-string -.11))
-(println (to-string 11.))
-(println (to-string -11.))
+(println 12.23)
+(println -12.23)
+(println .11)
+(println -.11)
+(println 11.)
+(println -11.)
 
 // bools
-(println (to-string true))
-(println (to-string false))
+(println true)
+(println false)
 
 // strings
-(println (to-string "test"))
+(println "test")
 
 // lists
-(println (to-string (list 1 2 3)))
+(println (list 1 2 3))

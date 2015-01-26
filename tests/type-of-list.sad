@@ -4,10 +4,10 @@
 //4
 //4
 
-(println (to-string (list.length (list 1 2 3))))
+(println (list.length (list 1 2 3)))
 var x (list 1 2 3)
 (println "a")
 (list.append! x 4)
 (println "b")
-(println (to-string (list.length x)))
-(println (to-string (x @ 3)))
+(println (list.length x))
+(println [x @ 3])

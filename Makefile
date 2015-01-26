@@ -44,11 +44,9 @@ clean: cleantests
 	@rm -f bin/sad bin/sad.exe
 	@rm -f bin/sad-test bin/sad-test.exe
 	@rm -f bin/prelude.sad
-
 test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 
 $(TESTRESULTS): 
-	@echo "-----------------------------------------------------"
-	@echo -n "$(@:testresults/%.testresult=%): "
+	@echo $(@:testresults/%.testresult=%)
 	@bin/sad --prelude bin/prelude.sad $(@:testresults/%.testresult=tests/%.sad) > $@
 	@bin/sad-test $(@:testresults/%.testresult=tests/%.sad) $@

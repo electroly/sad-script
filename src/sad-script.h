@@ -291,7 +291,7 @@ void           SdEnv_Delete(SdEnv* self);
 SdValue_r      SdEnv_Root(SdEnv_r self);
 SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
-void           SdEnv_CollectGarbage(SdEnv_r self);
+void           SdEnv_CollectGarbage(SdEnv_r self, SdValue_r extra_in_use[], size_t extra_in_use_count);
 SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue_r value);
 SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
 unsigned long  SdEnv_AllocationCount(SdEnv_r self);

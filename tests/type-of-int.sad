@@ -3,9 +3,9 @@
 //2
 //3
 
-(println (to-string (type-of 1)))
-(println (to-string TYPE-INT))
+(println (type-of 1))
+(println TYPE-INT)
 var b 2
 var c [1 + b]
-(println (to-string b))
-(println (to-string c))
+(println b)
+(println c)

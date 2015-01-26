@@ -123,8 +123,7 @@ int main(int argc, const char* argv[]) {
       printf("FAIL\n");
       printf("************ Expected:\n\"%s\"\n", expected);
       printf("************ Actual:\n\"%s\"\n", actual);
-   } else {
-      printf("PASS\n");
+      printf("************\n\n\n");
    }
 
 end:

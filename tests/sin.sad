@@ -1,0 +1,11 @@
+//0.479426
+//0.841471
+//0.997495
+//0.000000
+//-0.841471
+
+(println (sin 0.5))
+(println (sin 1.0))
+(println (sin 1.5))
+(println (sin 0.0))
+(println (sin -1.0))

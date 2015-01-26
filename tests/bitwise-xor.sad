@@ -1,0 +1,14 @@
+//3855
+//65535
+//0
+//4080
+
+var ffff 65535
+var 0f0f 3855
+var f0f0 61680
+var 00ff 255
+
+(println [f0f0 bitwise-xor ffff])
+(println [f0f0 bitwise-xor 0f0f])
+(println [f0f0 bitwise-xor f0f0])
+(println [0f0f bitwise-xor 00ff])
