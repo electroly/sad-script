@@ -480,6 +480,22 @@ void Sad_Delete(Sad* self) {
    SdFree(self);
 }
 
+SdResult Sad_AddScript(Sad_r self, const char* code) {
+   SdValue_r program_node;
+   SdResult result;
+
+   assert(self);
+   assert(code);
+   if (SdFailed(result = SdParser_ParseProgram(self->env, code, &program_node)))
+      return result;
+   return SdEnv_AddProgramAst(self->env, program_node);
+}
+
+SdResult Sad_Execute(Sad_r self) {
+   assert(self);
+   return SdEngine_ExecuteProgram(self->engine);
+}
+
 SdResult Sad_ExecuteScript(Sad_r self, const char* code) {
    SdValue_r program_node;
    SdResult result;
@@ -1980,14 +1996,11 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
       ch = text[i];
       peek = text[i + 1];
 
-      if (ch == '\n') {
-         source_line++;
+      if (ch == '\n')
          in_comment = SdFalse;
-      }
 
-      if (in_comment) {
+      if (in_comment)
          continue;
-      }
 
       if (in_string) {
          if (in_escape) {
@@ -2085,6 +2098,9 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
             SdStringBuf_AppendChar(current_text, ch);
             break;
       }
+
+      if (ch == '\n')
+         source_line++;
    }
 
    /* Source may end at the end of a token rather than with a separator. */
@@ -2220,6 +2236,7 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
 
 SdBool SdScanner_IsIntLit(const char* text) {
    size_t i, length;
+   int digits = 0;
 
    assert(text);
    length = strlen(text);
@@ -2227,16 +2244,19 @@ SdBool SdScanner_IsIntLit(const char* text) {
    for (i = 0; i < length; i++) {
       if (text[i] == '-' && i == 0) {
          /* negative sign okay in the first character position */
-      } else if (text[i] < '0' || text[i] > '9') {
+      } else if (text[i] >= '0' && text[i] <= '9') {
+         digits++;
+      } else {
          return SdFalse;
       }
    }
-   return SdTrue;
+   return digits > 0;
 }
 
 SdBool SdScanner_IsDoubleLit(const char* text) {
    size_t i, length;
    SdBool dot = SdFalse;
+   int digits = 0;
 
    assert(text);
    length = strlen(text);
@@ -2245,13 +2265,15 @@ SdBool SdScanner_IsDoubleLit(const char* text) {
       if (text[i] == '-' && i == 0) {
          /* negative sign okay in the first character position */
       } else if (text[i] == '.' && !dot) {
-         /* one dot allowed anywhere */
+         /* one dot required somewhere */
          dot = SdTrue;
-      } else if (text[i] < '0' || text[i] > '9') {
+      } else if (text[i] >= '0' && text[i] <= '9') {
+         digits++;
+      } else {
          return SdFalse;
       }
    }
-   return SdTrue;
+   return digits > 0 && dot;
 }
 
 SdBool SdScanner_IsEof(SdScanner_r self) {
@@ -2276,6 +2298,15 @@ SdTokenType SdScanner_PeekType(SdScanner_r self) { /* SdTokenType_NONE if eof */
       return SdTokenType_NONE;
    } else {
       return SdToken_Type(token);
+   }
+}
+
+SdToken_r SdScanner_PeekToken(SdScanner_r self) {
+   SdToken_r token;
+   if (!SdScanner_Peek(self, &token)) {
+      return NULL;
+   } else {
+      return token;
    }
 }
 
@@ -2332,12 +2363,15 @@ SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) {
    SdStringBuf* buf;
    SdResult result;
    
-   assert(token);
    assert(message);
    buf = SdStringBuf_New();
-   SdStringBuf_AppendCStr(buf, "Line ");
-   SdStringBuf_AppendInt(buf, SdToken_SourceLine(token));
-   SdStringBuf_AppendCStr(buf, ": ");
+   if (token) {
+      SdStringBuf_AppendCStr(buf, "Line: ");
+      SdStringBuf_AppendInt(buf, SdToken_SourceLine(token));
+      SdStringBuf_AppendCStr(buf, "\nToken: ");
+      SdStringBuf_AppendCStr(buf, SdToken_Text(token));
+      SdStringBuf_AppendCStr(buf, "\n");
+   }
    SdStringBuf_AppendCStr(buf, message);
    result = SdFail(code, SdStringBuf_CStr(buf));
    SdStringBuf_Delete(buf);
@@ -2615,7 +2649,7 @@ SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_nod
          break;
 
       default:
-         result = SdFail(SdErr_UNEXPECTED_TOKEN, "Expected expression.");
+         result = SdParser_Fail(SdErr_UNEXPECTED_TOKEN, SdScanner_PeekToken(scanner), "Expected expression.");
          break;
    }
 
@@ -2869,6 +2903,8 @@ SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node)
    if (SdScanner_PeekType(scanner) == SdTokenType_ELSE) {
       SdParser_READ_EXPECT_TYPE(SdTokenType_ELSE);
       SdParser_READ_BODY(else_body);
+   } else {
+      else_body = SdAst_Body_New(env, SdList_New());
    }
 
    *out_node = SdAst_If_New(env, condition_expr, true_body, elseifs, else_body);
@@ -2910,6 +2946,7 @@ SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node
 
    switch (SdScanner_PeekType(scanner)) {
       case SdTokenType_FROM: { /* for x from 1 to 10 */
+         SdParser_READ_EXPECT_TYPE(SdTokenType_FROM);
          SdParser_READ_EXPR(start_expr);
          SdParser_READ_EXPECT_TYPE(SdTokenType_TO);
          SdParser_READ_EXPR(stop_expr);
@@ -3003,6 +3040,8 @@ SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_n
    if (SdScanner_PeekType(scanner) == SdTokenType_DEFAULT) {
       SdParser_READ_EXPECT_TYPE(SdTokenType_DEFAULT);
       SdParser_READ_BODY(default_body);
+   } else {
+      default_body = SdAst_Body_New(env, SdList_New());
    }
 
    SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_BRACE);

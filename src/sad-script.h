@@ -209,7 +209,8 @@ SdBool         SdFailed(SdResult result);
 /* Sad ***************************************************************************************************************/
 Sad*           Sad_New(void);
 void           Sad_Delete(Sad* self);
-SdResult       Sad_ExecuteScript(Sad_r self, const char* code);
+SdResult       Sad_AddScript(Sad_r self, const char* code);
+SdResult       Sad_Execute(Sad_r self);
 SdEnv_r        Sad_Env(Sad_r self);
 
 /* SdString **********************************************************************************************************/
@@ -490,6 +491,7 @@ void           SdScanner_Tokenize(SdScanner_r self, const char* text);
 SdBool         SdScanner_IsEof(SdScanner_r self);
 SdBool         SdScanner_Peek(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
 SdTokenType    SdScanner_PeekType(SdScanner_r self); /* SdTokenType_NONE if eof */
+SdToken_r      SdScanner_PeekToken(SdScanner_r self); /* may be null */
 SdBool         SdScanner_Read(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
 
 /* SdParser **********************************************************************************************************/

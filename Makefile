@@ -21,10 +21,10 @@ bin/sad: obj bin $(SAD_OBJECTS) bin/prelude.sad
 bin/sad-test: obj bin bin/sad $(SAD_TEST_OBJECTS)
 	$(LINKER) $@ $(LFLAGS) $(SAD_TEST_OBJECTS)
 
-obj/%.o : src/%.c
+obj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-bin/prelude.sad:
+bin/prelude.sad: src/prelude.sad
 	cp src/prelude.sad bin/prelude.sad
 
 obj:
@@ -41,10 +41,11 @@ clean: cleantests
 
 distclean: clean
 	@rm -f bin/sad bin/sad.exe
+	@rm -f bin/sad-test bin/sad-test.exe
 	@rm -f bin/prelude.sad
 
-tests: cleantests bin/sad bin/sad-test $(TESTRESULTS)
+tests: cleantests bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 
 $(TESTRESULTS): 
-	@bin/sad $(@:obj/%.testresult=tests/%.sad) > $@
+	@bin/sad --prelude bin/prelude.sad $(@:obj/%.testresult=tests/%.sad) > $@
 	@bin/sad-test $(@:obj/%.testresult=tests/%.sad) $@ $(@:obj/%.testresult=%)
