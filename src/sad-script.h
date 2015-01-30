@@ -251,6 +251,10 @@ SdList_r       SdValue_GetList(SdValue_r self);
 SdBool         SdValue_Equals(SdValue_r a, SdValue_r b);
 int            SdValue_Hash(SdValue_r self);
 
+/* Used only by the garbage collector */
+SdBool         SdValue_IsGcMarked(SdValue_r self);
+void           SdValue_SetGcMark(SdValue_r self, SdBool mark);
+
 /* SdList ************************************************************************************************************/
 SdList*        SdList_New(void);
 void           SdList_Delete(SdList* self);
@@ -291,10 +295,12 @@ void           SdEnv_Delete(SdEnv* self);
 SdValue_r      SdEnv_Root(SdEnv_r self);
 SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
 SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
-void           SdEnv_CollectGarbage(SdEnv_r self, SdValue_r extra_in_use[], size_t extra_in_use_count);
+void           SdEnv_CollectGarbage(SdEnv_r self);
 SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue_r value);
 SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
 unsigned long  SdEnv_AllocationCount(SdEnv_r self);
+SdValue_r      SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent);
+void           SdEnv_EndFrame(SdEnv_r self, SdValue_r frame);
 
 SdValue_r      SdEnv_BoxNil(SdEnv_r env);
 SdValue_r      SdEnv_BoxInt(SdEnv_r env, int x);
@@ -464,6 +470,8 @@ SdValueSet*    SdValueSet_New(void);
 void           SdValueSet_Delete(SdValueSet* self);
 SdBool         SdValueSet_Add(SdValueSet_r self, SdValue_r item); /* true = added, false = already exists */
 SdBool         SdValueSet_Has(SdValueSet_r self, SdValue_r item);
+SdBool         SdValueSet_Remove(SdValueSet_r self, SdValue_r item); /* true = removed, false = wasn't there */
+SdList_r       SdValueSet_GetList(SdValueSet_r self);
 
 /* SdChain ***********************************************************************************************************/
 SdChain*       SdChain_New(void);

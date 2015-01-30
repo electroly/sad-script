@@ -85,6 +85,7 @@ struct SdStringBuf_s {
 struct SdValue_s {
    SdType type;
    SdValueUnion payload;
+   SdBool gc_mark; /* used by the mark-and-sweep garbage collector */
 };
 
 struct SdList_s {
@@ -98,6 +99,7 @@ struct SdList_s {
 struct SdEnv_s {
    SdValue_r root; /* contains all living/connected objects */
    SdChain* values_chain; /* contains all objects that haven't been deleted yet */
+   SdValueSet* active_frames; /* contains all currently active frames in the interpreter engine */
    unsigned long allocation_count;
 };
 
@@ -140,12 +142,11 @@ struct SdEngine_s {
 
 static char* SdStrdup(const char* src);
 static int SdMin(int a, int b);
-static void SdUnreferenced(void* a);
 
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
 static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item);
-static void SdEnv_CollectGarbage_FindConnectedValues(SdValue_r root, SdValueSet_r connected_values);
+static void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root);
 static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame);
 
 static SdValue_r SdAst_NodeValue(SdValue_r node, size_t value_index);
@@ -315,14 +316,20 @@ static void SdAssertNonEmptyString(SdString_r x) {
 #ifdef SD_DEBUG
 void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
    memset(ptr, 0, size);
-   printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);
+   /*printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
+   (void)line;
+   (void)s;
+   (void)func;
    return ptr;
 }
 
 #define SdDebugAlloc(size, line, s, func) SdDebugAllocCore(malloc(size), size, line, s, func)
 
 void SdDebugFree(void* ptr, int line, const char* s, const char* func) {
-   printf("%x FREE -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);
+   /*printf("%x FREE -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
+   (void)line;
+   (void)s;
+   (void)func;
    free(ptr);
 }
 #define SdAlloc(size) SdDebugAlloc(size, __LINE__, #size, __FUNCTION__)
@@ -418,10 +425,6 @@ int SdMin(int a, int b) {
       return a;
    else
       return b;
-}
-
-void SdUnreferenced(void* a) { 
-   a = NULL; 
 }
 
 /* SdResult **********************************************************************************************************/
@@ -834,6 +837,16 @@ int SdValue_Hash(SdValue_r self) {
    return hash;
 }
 
+SdBool SdValue_IsGcMarked(SdValue_r self) {
+   assert(self);
+   return self->gc_mark;
+}
+
+void SdValue_SetGcMark(SdValue_r self, SdBool mark) {
+   assert(self);
+   self->gc_mark = mark;
+}
+
 /* SdList ************************************************************************************************************/
 SdList* SdList_New(void) {
    return SdAlloc(sizeof(SdList));
@@ -1117,8 +1130,9 @@ SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
 
 SdEnv* SdEnv_New(void) {
    SdEnv* env = SdAlloc(sizeof(SdEnv));
-   env->values_chain = SdChain_New();
+   env->values_chain = SdChain_New(); /* must be done before calling SdEnv_Root_New */
    env->root = SdEnv_Root_New(env);
+   env->active_frames = SdValueSet_New();
    return env;
 }
 
@@ -1130,7 +1144,9 @@ void SdEnv_Delete(SdEnv* self) {
 #endif
    /* Allow the garbage collector to clean up the tree starting at root. */
    self->root = NULL;
-   SdEnv_CollectGarbage(self, NULL, 0);
+   SdValueSet_Delete(self->active_frames);
+   self->active_frames = NULL;
+   SdEnv_CollectGarbage(self);
    assert(SdChain_Count(self->values_chain) == 0); /* shouldn't be anything left */
    SdChain_Delete(self->values_chain);
    SdFree(self);
@@ -1175,58 +1191,68 @@ SdResult SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node) {
    return SdResult_SUCCESS;
 }
 
-void SdEnv_CollectGarbage(SdEnv_r self, SdValue_r extra_in_use[], size_t extra_in_use_count) {
-   SdValueSet* connected_values;
+void SdEnv_CollectGarbage(SdEnv_r self) {
    SdChainNode_r value_node;
-   size_t i;
+   SdList_r active_frames_list;
+   size_t i, count;
 
    assert(self);
-   connected_values = SdValueSet_New();
-   value_node = SdChain_Head(self->values_chain);
    
-   /* mark */
+   /* clear all marks */
+   value_node = SdChain_Head(self->values_chain);
+   while (value_node) {
+      SdValue_SetGcMark(SdChainNode_Value(value_node), SdFalse);
+      value_node = SdChainNode_Next(value_node);
+   }
+
+   /* mark connected values */
    if (self->root)
-      SdEnv_CollectGarbage_FindConnectedValues(self->root, connected_values);
+      SdEnv_CollectGarbage_MarkConnectedValues(self->root);
 
-   for (i = 0; i < extra_in_use_count; i++)
-      SdValueSet_Add(connected_values, extra_in_use[i]);
+   if (self->active_frames) {
+      active_frames_list = SdValueSet_GetList(self->active_frames);
+      count = SdList_Count(active_frames_list);
+      for (i = 0; i < count; i++)
+         SdEnv_CollectGarbage_MarkConnectedValues(SdList_GetAt(active_frames_list, i));
+   }
 
-   /* sweep */
+   /* sweep unmarked values */
+   value_node = SdChain_Head(self->values_chain);
    while (value_node) {
       SdChainNode_r next_node;
       SdValue_r value;
 
       next_node = SdChainNode_Next(value_node);
       value = SdChainNode_Value(value_node);
-      if (!SdValueSet_Has(connected_values, value)) { 
+      if (!SdValue_IsGcMarked(value)) { 
          /* this value is garbage */
          SdValue_Delete(value);
          SdChain_Remove(self->values_chain, value_node);
       }
       value_node = next_node;
    }
-
-   SdValueSet_Delete(connected_values);
 }
 
-void SdEnv_CollectGarbage_FindConnectedValues(SdValue_r root, SdValueSet_r connected_values) {
+void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root) {
    SdChain* stack;
    
    assert(root);
-   assert(connected_values);
    stack = SdChain_New();
    SdChain_Push(stack, root);
 
    while (SdChain_Count(stack) > 0) {
       SdValue_r node = SdChain_Pop(stack);
-      if (SdValueSet_Add(connected_values, node) && SdValue_Type(node) == SdType_LIST) {
-         SdList_r list;
-         size_t i, count;
+      if (!SdValue_IsGcMarked(node)) {
+         SdValue_SetGcMark(node, SdTrue);
+         if (SdValue_Type(node) == SdType_LIST) {
+            SdList_r list;
+            size_t i, count;
 
-         list = SdValue_GetList(node);
-         count = SdList_Count(list);
-         for (i = 0; i < count; i++) {
-            SdChain_Push(stack, SdList_GetAt(list, i));
+            list = SdValue_GetList(node);
+            count = SdList_Count(list);
+            for (i = 0; i < count; i++) {
+               SdChain_Push(stack, SdList_GetAt(list, i));
+            }
          }
       }
    }
@@ -1289,6 +1315,22 @@ SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame) {
 unsigned long SdEnv_AllocationCount(SdEnv_r self) {
    assert(self);
    return self->allocation_count;
+}
+
+SdValue_r SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent) {
+   assert(self);
+   assert(parent);
+   SdValue_r frame = SdEnv_Frame_New(self, parent);
+   SdValueSet_Add(self->active_frames, frame);
+   return frame;
+}
+
+void SdEnv_EndFrame(SdEnv_r self, SdValue_r frame) {
+   assert(self);
+   assert(frame);
+   if (!SdValueSet_Remove(self->active_frames, frame)) {
+      assert(SdFalse); /* frame was supposed to be there, but was not */
+   }
 }
 
 SdValue_r SdEnv_BoxNil(SdEnv_r env) {
@@ -1833,6 +1875,25 @@ SdBool SdValueSet_Has(SdValueSet_r self, SdValue_r item) {
    assert(item);
    result = SdList_Search(self->list, SdValueSet_CompareFunc, item);
    return result.exact;
+}
+
+SdBool SdValueSet_Remove(SdValueSet_r self, SdValue_r item) { /* true = removed, false = wasn't there */
+   SdSearchResult result;
+
+   assert(self);
+   assert(item);
+   result = SdList_Search(self->list, SdValueSet_CompareFunc, item);
+   if (result.exact) { 
+      SdList_RemoveAt(self->list, result.index);
+      return SdTrue;
+   } else {
+      return SdFalse;
+   }
+}
+
+SdList_r SdValueSet_GetList(SdValueSet_r self) {
+   assert(self);
+   return self->list;
 }
 
 /* SdChain ***********************************************************************************************************/
@@ -3313,7 +3374,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
       return SdEngine_CallIntrinsic(self, function_name, arguments, out_return);
 
    /* create a frame containing the argument values */
-   call_frame = SdEnv_Frame_New(self->env, SdEnv_Closure_Frame(closure));
+   call_frame = SdEnv_BeginFrame(self->env, SdEnv_Closure_Frame(closure));
    count = SdList_Count(arguments);
    for (i = 0; i < count; i++) {
       SdValue_r param_name, arg_value;
@@ -3325,7 +3386,10 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    }
 
    /* execute the function body using the frame we just constructed */
-   return SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
+   result = SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
+
+   SdEnv_EndFrame(self->env, call_frame);
+   return result;
 }
 
 SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value) {
@@ -3403,7 +3467,8 @@ SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var
 
 SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r frame, SdValue_r query, SdValue_r* out_value) {
    SdResult result;
-   SdValue_r value;
+   SdList* argument_values = NULL;
+   SdValue_r value, step_frame = NULL;
    SdList_r steps;
    size_t i, count;
 
@@ -3420,13 +3485,12 @@ SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r frame, SdValue_r quer
    steps = SdAst_Query_Steps(query);
    count = SdList_Count(steps);
    for (i = 0; i < count; i++) {
-      SdList* argument_values;
       SdList_r argument_exprs;
-      SdValue_r call, step_frame;
+      SdValue_r call;
       size_t j, num_arguments;
 
       call = SdList_GetAt(steps, i);
-      step_frame = SdEnv_Frame_New(self->env, frame);
+      step_frame = SdEnv_BeginFrame(self->env, frame);
 
       argument_exprs = SdAst_Call_Arguments(call);
       argument_values = SdList_New();
@@ -3436,20 +3500,24 @@ SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r frame, SdValue_r quer
       for (j = 0; j < num_arguments; j++) {
          SdValue_r argument_expr, argument_value;
          argument_expr = SdList_GetAt(argument_exprs, j);
-         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, argument_expr, &argument_value))) {
-            SdList_Delete(argument_values);
-            return result;
-         }
+         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, argument_expr, &argument_value))) 
+            goto end;
          SdList_Append(argument_values, argument_value);
       }
 
-      if (SdFailed(result = SdEngine_Call(self, step_frame, SdAst_Call_FunctionName(call), argument_values, &value))) {
-         SdList_Delete(argument_values);
-         return result;
-      }
+      if (SdFailed(result = SdEngine_Call(self, step_frame, SdAst_Call_FunctionName(call), argument_values, &value)))
+         goto end;
+
+      SdList_Delete(argument_values);
+      argument_values = NULL;
+      SdEnv_EndFrame(self->env, step_frame);
+      step_frame = NULL;
    }
 
    *out_value = value;
+end:
+   if (argument_values) SdList_Delete(argument_values);
+   if (step_frame) SdEnv_EndFrame(self->env, step_frame);
    return result;
 }
 
@@ -3511,9 +3579,7 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
 #endif
 
    if (gc_needed) {
-      SdValue_r extra_in_use[1];
-      extra_in_use[0] = frame;
-      SdEnv_CollectGarbage(self->env, extra_in_use, 1);
+      SdEnv_CollectGarbage(self->env);
       self->last_gc = SdEnv_AllocationCount(self->env);
    }
 
@@ -3651,7 +3717,7 @@ SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r statemen
 
 SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r iter_name, start_expr, start_value, stop_expr, stop_value, body, loop_frame;
+   SdValue_r iter_name, start_expr, start_value, stop_expr, stop_value, body, loop_frame = NULL;
    int i, start, stop;
 
    assert(self);
@@ -3682,22 +3748,26 @@ SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r stateme
 
    /* execute the body in a new frame for each iteration */
    for (i = start; i <= stop; i++) {
-      loop_frame = SdEnv_Frame_New(self->env, frame);
+      loop_frame = SdEnv_BeginFrame(self->env, frame);
       if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, SdEnv_BoxInt(self->env, i))))
-         return result;
+         goto end;
       *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
-         return result;
+         goto end;
       if (*out_return) /* a return statement inside the loop will break from the loop */
-         return result;
+         goto end;
+      SdEnv_EndFrame(self->env, loop_frame);
+      loop_frame = NULL;
    }
 
+end:
+   if (loop_frame) SdEnv_EndFrame(self->env, loop_frame);
    return result;
 }
 
 SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r iter_name, index_name, haystack_expr, haystack_value, body, loop_frame, iter_value;
+   SdValue_r iter_name, index_name, haystack_expr, haystack_value, body, iter_value, loop_frame = NULL;
    SdList_r haystack;
    size_t i, count;
 
@@ -3724,26 +3794,30 @@ SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r sta
    count = SdList_Count(haystack);
    for (i = 0; i < count; i++) {
       iter_value = SdList_GetAt(haystack, i);
-      loop_frame = SdEnv_Frame_New(self->env, frame);
+      loop_frame = SdEnv_BeginFrame(self->env, frame);
       if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, iter_value)))
-         return result;
+         goto end;
       if (SdValue_Type(index_name) != SdType_NIL) { /* user may not have specified an indexer variable */
          if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
-            return result;
+            goto end;
       }
       *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
-         return result;
+         goto end;
       if (*out_return) /* a return statement inside the loop will break from the loop */
-         return result;
+         goto end;
+      SdEnv_EndFrame(self->env, loop_frame);
+      loop_frame = NULL;
    }
 
+end:
+   if (loop_frame) SdEnv_EndFrame(self->env, loop_frame);
    return result;
 }
 
 SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r expr, value, body, loop_frame;
+   SdValue_r expr, value, body, loop_frame = NULL;
 
    assert(self);
    assert(frame);
@@ -3763,20 +3837,24 @@ SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_r state
       if (!SdValue_GetBool(value))
          break;
 
-      loop_frame = SdEnv_Frame_New(self->env, frame);
+      loop_frame = SdEnv_BeginFrame(self->env, frame);
       *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
-         return result;
+         goto end;
       if (*out_return) /* a return statement inside the loop will break from the loop */
-         return result;
+         goto end;
+      SdEnv_EndFrame(self->env, loop_frame);
+      loop_frame = NULL;
    }
 
+end:
+   if (loop_frame) SdEnv_EndFrame(self->env, loop_frame);
    return result;
 }
 
 SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r expr, value, body, loop_frame;
+   SdValue_r expr, value, body, loop_frame = NULL;
 
    assert(self);
    assert(frame);
@@ -3789,21 +3867,27 @@ SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r statemen
    body = SdAst_Do_Body(statement);
 
    while (SdTrue) {
-      loop_frame = SdEnv_Frame_New(self->env, frame);
+      loop_frame = SdEnv_BeginFrame(self->env, frame);
       *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
-         return result;
+         goto end;
       if (*out_return) /* a return statement inside the loop will break from the loop */
-         return result;
+         goto end;
 
       if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &value)))
-         return result;
-      if (SdValue_Type(value) != SdType_BOOL)
-         return SdFail(SdErr_TYPE_MISMATCH, "WHILE expression does not evaluate to a Boolean.");
+         goto end;
+      if (SdValue_Type(value) != SdType_BOOL) {
+         result = SdFail(SdErr_TYPE_MISMATCH, "WHILE expression does not evaluate to a Boolean.");
+         goto end;
+      }
       if (!SdValue_GetBool(value))
-         break;
+         goto end;
+      SdEnv_EndFrame(self->env, loop_frame);
+      loop_frame = NULL;
    }
 
+end:
+   if (loop_frame) SdEnv_EndFrame(self->env, frame);
    return result;
 }
 
@@ -3835,13 +3919,17 @@ SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue_r stat
          return result;
       if (SdValue_Equals(value, case_value)) {
          case_body = SdAst_Case_Body(cas);
-         case_frame = SdEnv_Frame_New(self->env, frame);
-         return SdEngine_ExecuteBody(self, case_frame, case_body, out_return);
+         case_frame = SdEnv_BeginFrame(self->env, frame);
+         result = SdEngine_ExecuteBody(self, case_frame, case_body, out_return);
+         SdEnv_EndFrame(self->env, case_frame);
+         return result;
       }
    }
 
-   case_frame = SdEnv_Frame_New(self->env, frame);
-   return SdEngine_ExecuteBody(self, case_frame, default_body, out_return);
+   case_frame = SdEnv_BeginFrame(self->env, frame);
+   result = SdEngine_ExecuteBody(self, case_frame, default_body, out_return);
+   SdEnv_EndFrame(self->env, case_frame);
+   return result;
 }
 
 SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
@@ -4186,7 +4274,7 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ListLength)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListGetAt)
-   SdUnreferenced(self);
+   (void)self;
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
@@ -4197,7 +4285,7 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListGetAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListSetAt)
-   SdUnreferenced(self);
+   (void)self;
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
@@ -4209,7 +4297,7 @@ SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListSetAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListInsertAt)
-   SdUnreferenced(self);
+   (void)self;
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list;
       int b_int;
@@ -4224,7 +4312,7 @@ SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListInsertAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListRemoveAt)
-   SdUnreferenced(self);
+   (void)self;
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
@@ -4257,7 +4345,7 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringGetAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Print)
-   SdUnreferenced(self);
+   (void)self;
    if (a_type == SdType_STRING) {
       printf("%s", SdString_CStr(SdValue_GetString(a_val)));
       *out_return = a_val;
