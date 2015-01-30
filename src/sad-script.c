@@ -138,8 +138,6 @@ struct SdEngine_s {
    unsigned long last_gc; /* the value of SdEnv_AllocationCount last time the GC was run */
 };
 
-static void* SdAlloc(size_t size);
-static void SdFree(void* ptr);
 static char* SdStrdup(const char* src);
 static int SdMin(int a, int b);
 static void SdUnreferenced(void* a);
@@ -398,13 +396,8 @@ static void SdDebugDumpChain(SdChain_r chain) {
    }
 }
 #else /* SD_DEBUG */
-void* SdAlloc(size_t size) {
-   return calloc(1, size);
-}
-
-void SdFree(void* ptr) {
-   free(ptr);
-}
+#define SdAlloc(size) calloc(1, (size))
+#define SdFree(ptr) free((ptr))
 #endif
 
 #define SdRealloc(ptr, size) realloc(ptr, size)
@@ -3521,6 +3514,7 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
       SdValue_r extra_in_use[1];
       extra_in_use[0] = frame;
       SdEnv_CollectGarbage(self->env, extra_in_use, 1);
+      self->last_gc = SdEnv_AllocationCount(self->env);
    }
 
    switch (SdAst_NodeType(statement)) {
