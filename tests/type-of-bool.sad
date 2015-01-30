@@ -9,7 +9,7 @@
 (println (type-of false))
 (println true)
 (println false)
-var f true
-var g (not f)
+var f = true
+var g = (not f)
 (println f)
 (println g)

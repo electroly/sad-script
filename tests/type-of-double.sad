@@ -27,7 +27,7 @@
 (println -1.)
 (println -.1)
 (println TYPE-DOUBLE)
-var d 2.0
-var e [1.0 + d]
+var d = 2.0
+var e = [1.0 + d]
 (println d)
 (println e)

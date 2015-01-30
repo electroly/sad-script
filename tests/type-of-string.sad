@@ -2,5 +2,5 @@
 //hello
 
 (println (type-of "hello"))
-var h "hello"
+var h = "hello"
 (println h)

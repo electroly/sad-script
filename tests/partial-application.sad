@@ -8,19 +8,19 @@ function add-and-multiply (add-value multiply-value x) {
    return [[x + add-value] * multiply-value]
 }
 
-var add-one-and-double (add-and-multiply 1 2)
+var add-one-and-double = (add-and-multiply 1 2)
 
 (println (add-and-multiply 1 2 3))
 (println (add-one-and-double 15))
 
-var add-one-and-multiply (add-and-multiply 1)
+var add-one-and-multiply = (add-and-multiply 1)
 
 (println (add-one-and-multiply 5 3))
 
-var add-one-and-triple (add-one-and-multiply 3)
+var add-one-and-triple = (add-one-and-multiply 3)
 
 (println (add-one-and-triple 6))
 
-var plus-one (+ 1)
+var plus-one = (+ 1)
 
 (println (plus-one 2))

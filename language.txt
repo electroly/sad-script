@@ -12,8 +12,8 @@
 <query> ::= QUERY OPEN_PAREN <expression> <query-step>* CLOSE_PAREN
 <query-step> ::= ARROW IDENTIFIER <expression>*
 <statement> ::= <call> | <infix-call> | <var> | <set> | <if> | <for> | <while> | <do> | <switch> | <return> | <die>
-<var> ::= VAR IDENTIFIER <expression>
-<set> ::= SET IDENTIFIER <expression>
+<var> ::= VAR IDENTIFIER EQUALS <expression>
+<set> ::= SET IDENTIFIER EQUALS <expression>
 <closure> ::= COLON
    (IDENTIFIER | (OPEN_PAREN IDENTIFIER* CLOSE_PAREN))
    (<expression> | <body>)
@@ -62,3 +62,4 @@ NIL
 ARROW
 FROM
 QUERY
+EQUALS (subtype of IDENTIFIER)

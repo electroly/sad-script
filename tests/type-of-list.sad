@@ -5,7 +5,7 @@
 //4
 
 (println (list.length (list 1 2 3)))
-var x (list 1 2 3)
+var x = (list 1 2 3)
 (println "a")
 (list.append! x 4)
 (println "b")

@@ -5,7 +5,7 @@
 
 (println (type-of 1))
 (println TYPE-INT)
-var b 2
-var c [1 + b]
+var b = 2
+var c = [1 + b]
 (println b)
 (println c)

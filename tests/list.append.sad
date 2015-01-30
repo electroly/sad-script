@@ -4,7 +4,7 @@
 //2
 //99
 
-var a (list)
+var a = (list)
 (println (list.length a))
 (list.append! a 88)
 (println (list.length a))

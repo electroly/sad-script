@@ -2595,6 +2595,19 @@ SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type,
    }
 }
 
+SdResult SdParser_ReadExpectEquals(SdScanner_r scanner) {
+   SdToken_r token;
+
+   assert(scanner);
+   if (!SdScanner_Read(scanner, &token))
+      return SdParser_FailEof();
+
+   if (SdToken_Type(token) != SdTokenType_IDENTIFIER || strcmp(SdToken_Text(token), "=") != 0)
+      return SdParser_Fail(SdErr_UNEXPECTED_TOKEN, token, "Expected: =");
+   else
+      return SdResult_SUCCESS;
+}
+
 SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
@@ -2943,6 +2956,7 @@ SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node
    assert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_VAR);
    SdParser_READ_IDENTIFIER(identifier);
+   SdParser_CALL(SdParser_ReadExpectEquals(scanner));
    SdParser_READ_EXPR(expr);
 
    *out_node = SdAst_Var_New(env, identifier, expr);
@@ -2963,6 +2977,7 @@ SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node
    assert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_SET);
    SdParser_READ_IDENTIFIER(identifier);
+   SdParser_CALL(SdParser_ReadExpectEquals(scanner));
    SdParser_READ_EXPR(expr);
 
    *out_node = SdAst_Set_New(env, identifier, expr);

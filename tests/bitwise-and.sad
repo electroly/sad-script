@@ -3,10 +3,10 @@
 //0
 //15
 
-var ffff 65535
-var 0f0f 3855
-var f0f0 61680
-var 00ff 255
+var ffff = 65535
+var 0f0f = 3855
+var f0f0 = 61680
+var 00ff = 255
 
 (println [ffff bitwise-and 0f0f])
 (println [ffff bitwise-and f0f0])

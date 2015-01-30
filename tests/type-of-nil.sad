@@ -4,5 +4,5 @@
 
 (println (type-of nil))
 (println TYPE-NIL)
-var a nil
+var a = nil
 (println a)
