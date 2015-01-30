@@ -287,7 +287,7 @@ SdResult       SdFile_ReadAllText(SdString_r file_path, SdString** out_text);
       (list VAR_SLOT name:Str payload:Value)
 
    Closure: (shows up as a payload)
-      (list CLOSURE context:Frame (list param-name:String ...) function-node:Function)
+      (list CLOSURE context:Frame (list param-name:String ...) function-node:Function (list partial-arg-value ...))
 */
 
 SdEnv*         SdEnv_New(void);
@@ -323,10 +323,13 @@ SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
 SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
 void           SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value);
 
-SdValue_r      SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node);
+SdValue_r      SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node,
+                  SdValue_r partial_arguments);
 SdValue_r      SdEnv_Closure_Frame(SdValue_r self);
-SdList_r       SdEnv_Closure_ParameterNames(SdValue_r self);
+SdValue_r      SdEnv_Closure_ParameterNames(SdValue_r self);
 SdValue_r      SdEnv_Closure_FunctionNode(SdValue_r self);
+SdValue_r      SdEnv_Closure_PartialArguments(SdValue_r self);
+SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments);
 
 /* SdAst *************************************************************************************************************/
 /*

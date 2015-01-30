@@ -1318,9 +1318,11 @@ unsigned long SdEnv_AllocationCount(SdEnv_r self) {
 }
 
 SdValue_r SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent) {
+   SdValue_r frame;
+   
    assert(self);
    assert(parent);
-   SdValue_r frame = SdEnv_Frame_New(self, parent);
+   frame = SdEnv_Frame_New(self, parent);
    SdValueSet_Add(self->active_frames, frame);
    return frame;
 }
@@ -1817,22 +1819,46 @@ void SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value) {
    SdList_SetAt(SdValue_GetList(self), 2, value);
 }
 
-SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node) {
+SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node,
+   SdValue_r partial_arguments) {
    SdAst_BEGIN(SdNodeType_CLOSURE)
 
    assert(env);
    SdAssertNode(frame, SdNodeType_FRAME);
    SdAssertAllValuesOfType(SdValue_GetList(param_names), SdType_STRING);
    SdAssertNode(function_node, SdNodeType_FUNCTION);
+   SdAssertValue(partial_arguments, SdType_LIST);
 
    SdAst_VALUE(frame)
    SdAst_VALUE(param_names)
    SdAst_VALUE(function_node)
+   SdAst_VALUE(partial_arguments)
    SdAst_END
 }
 SdAst_VALUE_GETTER(SdEnv_Closure_Frame, SdNodeType_CLOSURE, 1)
-SdAst_LIST_GETTER(SdEnv_Closure_ParameterNames, SdNodeType_CLOSURE, 2)
+SdAst_VALUE_GETTER(SdEnv_Closure_ParameterNames, SdNodeType_CLOSURE, 2)
 SdAst_VALUE_GETTER(SdEnv_Closure_FunctionNode, SdNodeType_CLOSURE, 3)
+SdAst_VALUE_GETTER(SdEnv_Closure_PartialArguments, SdNodeType_CLOSURE, 4)
+
+SdValue_r SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments) {
+   SdList* partial_arguments = NULL;
+   size_t i, count;
+
+   assert(self);
+   assert(env);
+   assert(arguments);
+
+   partial_arguments = SdList_Clone(SdValue_GetList(SdEnv_Closure_PartialArguments(self)));
+   count = SdList_Count(arguments);
+   for (i = 0; i < count; i++)
+      SdList_Append(partial_arguments, SdList_GetAt(arguments, i));
+
+   return SdEnv_Closure_New(env,
+      SdEnv_Closure_Frame(self),
+      SdEnv_Closure_ParameterNames(self),
+      SdEnv_Closure_FunctionNode(self),
+      SdEnv_BoxList(env, partial_arguments));
+}
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet* SdValueSet_New(void) {
@@ -3342,9 +3368,10 @@ SdResult SdEngine_ExecuteProgram(SdEngine_r self) {
 SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_name, SdList_r arguments, 
    SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r closure_slot, closure, call_frame, function;
-   SdList_r param_names;
-   size_t i, count;
+   SdValue_r closure_slot, closure, function, call_frame = NULL;
+   SdList_r param_names, partial_arguments;
+   SdList* total_arguments = NULL;
+   size_t i, count, partial_arguments_count, total_arguments_count;
 
    assert(self);
    assert(frame);
@@ -3355,40 +3382,69 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
 
    /* ensure that 'function_name' refers to a defined closure */
    closure_slot = SdEnv_FindVariableSlot(self->env, frame, function_name, SdTrue);
-   if (!closure_slot)
-      return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Function not found: ", function_name);
+   if (!closure_slot) {
+      result = SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Function not found: ", function_name);
+      goto end;
+   }
 
    closure = SdEnv_VariableSlot_Value(closure_slot);
-   if (SdAst_NodeType(closure) != SdNodeType_CLOSURE)
-      return SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
+   if (SdAst_NodeType(closure) != SdNodeType_CLOSURE) {
+      result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
+      goto end;
+   }
    function = SdEnv_Closure_FunctionNode(closure);
+
+   partial_arguments = SdValue_GetList(SdEnv_Closure_PartialArguments(closure));
+   partial_arguments_count = SdList_Count(partial_arguments);
+   total_arguments_count = partial_arguments_count + SdList_Count(arguments);
 
    /* ensure that the argument list matches the parameter list. skip the check for intrinsics since they are more 
       flexible and will do the check themselves. */
-   param_names = SdEnv_Closure_ParameterNames(closure);
-   if (!SdAst_Function_IsImported(function) && SdList_Count(arguments) != SdList_Count(param_names))
-      return SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Wrong number of arguments to function: ", function_name);
+   param_names = SdValue_GetList(SdEnv_Closure_ParameterNames(closure));
+   if (!SdAst_Function_IsImported(function) && total_arguments_count > SdList_Count(param_names)) {
+      result = SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Too many arguments to function: ", function_name);
+      goto end;
+   }
+
+   /* if this is a partial function application, then construct the closure and return it. */
+   if (total_arguments_count < SdList_Count(param_names)) {
+      *out_return = SdEnv_Closure_CopyWithPartialArguments(closure, self->env, arguments);
+      goto end;
+   }
+
+   /* construct the total arguments list from the partial arguments and the current arguments */
+   total_arguments = SdList_New();
+   for (i = 0; i < partial_arguments_count; i++)
+      SdList_Append(total_arguments, SdList_GetAt(partial_arguments, i));
+   count = SdList_Count(arguments);
+   for (i = 0; i < count; i++)
+      SdList_Append(total_arguments, SdList_GetAt(arguments, i));
 
    /* if this is an intrinsic then call it now; no frame needed */
-   if (SdAst_Function_IsImported(function))
-      return SdEngine_CallIntrinsic(self, function_name, arguments, out_return);
+   if (SdAst_Function_IsImported(function)) {
+      result = SdEngine_CallIntrinsic(self, SdValue_GetString(SdAst_Function_Name(function)), 
+         total_arguments, out_return);
+      goto end;
+   }
 
    /* create a frame containing the argument values */
    call_frame = SdEnv_BeginFrame(self->env, SdEnv_Closure_Frame(closure));
-   count = SdList_Count(arguments);
+   count = SdList_Count(total_arguments);
    for (i = 0; i < count; i++) {
       SdValue_r param_name, arg_value;
       
       param_name = SdList_GetAt(param_names, i);
-      arg_value = SdList_GetAt(arguments, i);
+      arg_value = SdList_GetAt(total_arguments, i);
       if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, arg_value)))
-         return result;
+         goto end;
    }
 
    /* execute the function body using the frame we just constructed */
    result = SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
 
-   SdEnv_EndFrame(self->env, call_frame);
+end:
+   if (total_arguments) SdList_Delete(total_arguments);
+   if (call_frame) SdEnv_EndFrame(self->env, call_frame);
    return result;
 }
 
@@ -3529,7 +3585,8 @@ SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r f
    assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
    assert(SdAst_NodeType(function) == SdNodeType_FUNCTION);
 
-   *out_value = SdEnv_Closure_New(self->env, frame, SdAst_Function_ParameterNames(function), function);
+   *out_value = SdEnv_Closure_New(self->env, frame, SdAst_Function_ParameterNames(function), function,
+      SdEnv_BoxList(self->env, SdList_New()));
    return SdResult_SUCCESS;
 }
 
