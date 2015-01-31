@@ -2,7 +2,7 @@
 CC=gcc
 
 ifeq ($(CC),gcc)
-	CFLAGS=-ansi -pedantic -Wall -Werror -O2 -x c
+	CFLAGS=-ansi -pedantic -Wall -Wextra -Werror -O2 -x c
 else
 	CFLAGS=
 endif
