@@ -3457,6 +3457,10 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    /* execute the function body using the frame we just constructed */
    result = SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
 
+   /* if the function did not return a value, then implicitly return a nil */
+   if (!*out_return)
+      *out_return = SdEnv_BoxNil(self->env);
+
 end:
    if (total_arguments) SdList_Delete(total_arguments);
    if (call_frame) SdEnv_EndFrame(self->env, call_frame);
