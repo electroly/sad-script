@@ -39,10 +39,14 @@ typedef int SdBool;
 #pragma warning(disable: 4820) /* '4' bytes padding added after data member '...' */
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*********************************************************************************************************************/
 
-/* Raw pointer: ownership is being transferred.
-   _r suffix: a pointer is being borrowed only; ownership is not transferred. */
+/* A raw pointer means that ownership is being transferred.
+   An _r typedef means that a pointer is only being only; ownership is not transferred. */
 typedef struct SdResult_s SdResult;
 typedef struct SdSearchResult_s SdSearchResult;
 typedef union SdIntDoublePun_u SdIntDoublePun;
@@ -280,22 +284,19 @@ SdList*        SdList_Clone(SdList_r self);
 SdResult       SdFile_WriteAllText(SdString_r file_path, SdString_r text);
 SdResult       SdFile_ReadAllText(SdString_r file_path, SdString** out_text);
 
-/* SdEnv *************************************************************************************************************/
-/*
-   Environment structure:
-   Root: 
-      (list ROOT (list Function ...) (list Statement ...) bottom:Frame)
-                  ^-- sorted by name
-   Frame:
-      (list FRAME parent:Frame? (list VariableSlot ...))
-                                 ^-- sorted by name
-   VariableSlot:
-      (list VAR_SLOT name:Str payload:Value)
-
-   Closure: (shows up as a payload)
-      (list CLOSURE context:Frame (list param-name:String ...) function-node:Function (list partial-arg-value ...))
+/* SdEnv **************************************************************************************************************
+               0     |    1             |    2                 |    3                   |     4
+   Root: ------------+------------------+----------------------+------------------------+----------------------------
+      (list ROOT     | Lst<Function>    | Lst<Statement>       | bottom:Frame)          | 
+                     | (sorted by name) |                      |                        | 
+   Frame: -----------+------------------+----------------------+------------------------+----------------------------
+      (list FRAME    | parent:Frame?    | Lst<VariableSlot>)   |                        | 
+                     |                  | (sorted by name)     |                        | 
+   VariableSlot: ----+------------------+----------------------+------------------------+----------------------------
+      (list VAR_SLOT | name:Str         | payload:Value)       |                        | 
+   Closure: ---------+------------------+----------------------+------------------------+----------------------------
+      (list CLOSURE  | context:Frame    | param-names:Lst<Str> | function-node:Function | partial-arg-values:Lst<*>)
 */
-
 SdEnv*         SdEnv_New(void);
 void           SdEnv_Delete(SdEnv* self);
 SdValue_r      SdEnv_Root(SdEnv_r self);
@@ -339,46 +340,41 @@ SdValue_r      SdEnv_Closure_FunctionNode(SdValue_r self);
 SdValue_r      SdEnv_Closure_PartialArguments(SdValue_r self);
 SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments);
 
-/* SdAst *************************************************************************************************************/
-/*
-   AST structure:
-   ? - indicates that the value may be nil
-
-               0           1                      2                      3                  4
-   Program:                                    
-      (list PROGRAM     (list Function ...)    (list Statement ...))
-   Function:                                   
-      (list FUNCTION    name:Str               (list param:Str ...)   Body               is-imported:Bool)
-   Statement:                                  
-      (list CALL        function-name:Str      (list Expr...))
-      (list VAR         variable-name:Str      value:Expr)
-      (list SET         variable-name:Str      value:Expr)
-      (list IF          condition:Expr         if-true:Body           (list ElseIf ...)  else:Body)
-      (list FOR         variable-name:Str      start:Expr             stop:Expr          Body)
-      (list FOREACH     iter-name:Str          index-name:Str?        haystack:Expr      Body)
-      (list WHILE       condition:Expr         Body)
-      (list DO          condition:Expr         Body)
-      (list SWITCH      Expr                   (list Case ...)        default:Body)
-      (list RETURN      Expr)
-      (list DIE         Expr)
-   ElseIf:                                     
-      (list ELSEIF      condition:Expr         Body)
-   Case:                                       
-      (list CASE        Expr                   Body)
-   Expr:                                       
-      (list INT_LIT     Int)
-      (list DOUBLE_LIT  Double)
-      (list BOOL_LIT    Bool)
-      (list STRING_LIT  Str)
-      (list NIL_LIT)
-      (list CALL        function-name:Str      (list Expr ...))
-      (list VAR_REF     identifier:Str)        
-      (list QUERY       Expr                   (list Call ...))
-      -- may also be FUNCTION
-   Body:                                       
-      (list BODY        (list Statement ...))  
+/* SdAst **************************************************************************************************************
+               0       |    1                  |    2                |    3          |    4
+   Program: -----------+-----------------------+---------------------+---------------+-------------------
+      (list PROGRAM    | Lst<Function>         | Lst<Statement>)     |               | 
+   Function: ----------+-----------------------+---------------------+---------------+-------------------
+      (list FUNCTION   | name:Str              | params:Lst<Str>     | Body          | is-imported:Bool)
+   Statement: ---------+-----------------------+---------------------+---------------+-------------------
+      (list CALL       | function-name:Str     | args:Lst<Expr>)     |               | 
+      (list VAR        | scalar-name:Str?      | elem-names:Lst<Str> | value:Expr)   | 
+      (list SET        | scalar-name:Str?      | elem-names:Lst<Str> | value:Expr)   | 
+      (list IF         | condition:Expr        | if-true:Body        | Lst<ElseIf>   | else:Body)
+      (list FOR        | variable-name:Str     | start:Expr          | stop:Expr     | Body)
+      (list FOREACH    | iter-name:Str         | index-name:Str?     | haystack:Expr | Body)
+      (list WHILE      | condition:Expr        | Body)               |               | 
+      (list DO         | condition:Expr        | Body)               |               | 
+      (list SWITCH     | Expr                  | Lst<Case>           | default:Body) | 
+      (list RETURN     | Expr)                 |                     |               | 
+      (list DIE        | Expr)                 |                     |               | 
+   ElseIf: ------------+-----------------------+---------------------+---------------+-------------------
+      (list ELSEIF     | condition:Expr        | Body)               |               | 
+   Case: --------------+-----------------------+---------------------+---------------+-------------------
+      (list CASE       | Expr                  | Body)               |               | 
+   Expr: --------------+-----------------------+---------------------+---------------+-------------------
+      (list INT_LIT    | Int)                  |                     |               | 
+      (list DOUBLE_LIT | Double)               |                     |               | 
+      (list BOOL_LIT   | Bool)                 |                     |               | 
+      (list STRING_LIT | Str)                  |                     |               | 
+      (list NIL_LIT)   |                       |                     |               | 
+      (list VAR_REF    | identifier:Str)       |                     |               | 
+      (list QUERY      | Expr                  | Lst<Call>)          |               | 
+      (list CALL ^     | ...                   |                     |               | 
+      (list FUNCTION ^ | ...                   |                     |               | 
+   Body: --------------+-----------------------+---------------------+---------------+-------------------
+      (list BODY       | (list Statement ...)) |                     |               | 
 */
-
 SdNodeType     SdAst_NodeType(SdValue_r node);
 
 SdValue_r      SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* statements);
@@ -525,6 +521,10 @@ SdResult       SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r functi
                   SdValue_r* out_return);
 
 /*********************************************************************************************************************/
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
 #ifdef _MSC_VER
 #pragma warning(pop) /* our disabled warnings won't affect files that #include this header */
 #endif
