@@ -1,0 +1,36 @@
+//1
+//2
+//3
+//1
+//(nil)
+//1
+//2
+//3
+//1
+//(nil)
+
+function returns-list () { 
+   return (list 1 2 3) 
+}
+
+var (a b c) = (returns-list)
+(println a)
+(println b)
+(println c)
+
+var (d) = (returns-list)
+(println d)
+
+var (e f g h) = (returns-list)
+(println h)
+
+set (a b c) = (returns-list)
+(println a)
+(println b)
+(println c)
+
+set (d) = (returns-list)
+(println d)
+
+set (e f g h) = (returns-list)
+(println h)

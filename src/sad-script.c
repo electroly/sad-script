@@ -194,7 +194,9 @@ static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r
 static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r statement);
+static SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdValue_r statement);
 static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r statement);
+static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdValue_r statement);
 static SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
@@ -1583,6 +1585,34 @@ SdValue_r SdAst_Set_New(SdEnv_r env, SdString* variable_name, SdValue_r value_ex
 SdAst_STRING_GETTER(SdAst_Set_VariableName, SdNodeType_SET, 1)
 SdAst_VALUE_GETTER(SdAst_Set_ValueExpr, SdNodeType_SET, 2)
 
+SdValue_r SdAst_MultiVar_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr) {
+   SdAst_BEGIN(SdNodeType_MULTI_VAR)
+
+   assert(env);
+   SdAssertAllValuesOfType(variable_names, SdType_STRING);
+   SdAssertExpr(value_expr);
+
+   SdAst_LIST(variable_names)
+   SdAst_VALUE(value_expr)
+   SdAst_END
+}
+SdAst_LIST_GETTER(SdAst_MultiVar_VariableNames, SdNodeType_MULTI_VAR, 1)
+SdAst_VALUE_GETTER(SdAst_MultiVar_ValueExpr, SdNodeType_MULTI_VAR, 2)
+
+SdValue_r SdAst_MultiSet_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr) {
+   SdAst_BEGIN(SdNodeType_MULTI_SET)
+
+   assert(env);
+   SdAssertAllValuesOfType(variable_names, SdType_STRING);
+   SdAssertExpr(value_expr);
+
+   SdAst_LIST(variable_names)
+   SdAst_VALUE(value_expr)
+   SdAst_END
+}
+SdAst_LIST_GETTER(SdAst_MultiSet_VariableNames, SdNodeType_MULTI_SET, 1)
+SdAst_VALUE_GETTER(SdAst_MultiSet_ValueExpr, SdNodeType_MULTI_SET, 2)
+
 SdValue_r SdAst_If_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r true_body, SdList* else_ifs,
    SdValue_r else_body) {
    SdAst_BEGIN(SdNodeType_IF)
@@ -2944,18 +2974,39 @@ SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node
    SdResult result = SdResult_SUCCESS;
    SdString* identifier = NULL;
    SdValue_r expr = NULL;
+   SdList* identifiers = NULL;
 
    assert(env);
    assert(scanner);
    assert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_VAR);
-   SdParser_READ_IDENTIFIER(identifier);
-   SdParser_CALL(SdParser_ReadExpectEquals(scanner));
-   SdParser_READ_EXPR(expr);
+   
+   if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_PAREN) { /* multiple list element assignment */
+      SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
+      identifiers = SdList_New();
+      while (SdScanner_PeekType(scanner) != SdTokenType_CLOSE_PAREN) {
+         SdParser_READ_IDENTIFIER(identifier);
+         SdList_Append(identifiers, SdEnv_BoxString(env, identifier));
+         identifier = NULL;
+      }
+      SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
 
-   *out_node = SdAst_Var_New(env, identifier, expr);
-   identifier = NULL;
+      SdParser_CALL(SdParser_ReadExpectEquals(scanner));
+      SdParser_READ_EXPR(expr);
+
+      *out_node = SdAst_MultiVar_New(env, identifiers, expr);
+      identifiers = NULL;
+   } else { /* single assignment */
+      SdParser_READ_IDENTIFIER(identifier);
+      SdParser_CALL(SdParser_ReadExpectEquals(scanner));
+      SdParser_READ_EXPR(expr);
+
+      *out_node = SdAst_Var_New(env, identifier, expr);
+      identifier = NULL;
+   }
+
 end:
+   if (identifiers) SdList_Delete(identifiers);
    if (identifier) SdString_Delete(identifier);
    return result;
 }
@@ -2965,18 +3016,39 @@ SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node
    SdResult result = SdResult_SUCCESS;
    SdString* identifier = NULL;
    SdValue_r expr = NULL;
+   SdList* identifiers = NULL;
 
    assert(env);
    assert(scanner);
    assert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_SET);
-   SdParser_READ_IDENTIFIER(identifier);
-   SdParser_CALL(SdParser_ReadExpectEquals(scanner));
-   SdParser_READ_EXPR(expr);
+   
+   if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_PAREN) { /* multiple list element assignment */
+      SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
+      identifiers = SdList_New();
+      while (SdScanner_PeekType(scanner) != SdTokenType_CLOSE_PAREN) {
+         SdParser_READ_IDENTIFIER(identifier);
+         SdList_Append(identifiers, SdEnv_BoxString(env, identifier));
+         identifier = NULL;
+      }
+      SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
 
-   *out_node = SdAst_Set_New(env, identifier, expr);
-   identifier = NULL;
+      SdParser_CALL(SdParser_ReadExpectEquals(scanner));
+      SdParser_READ_EXPR(expr);
+
+      *out_node = SdAst_MultiSet_New(env, identifiers, expr);
+      identifiers = NULL;
+   } else { /* single assignment */
+      SdParser_READ_IDENTIFIER(identifier);
+      SdParser_CALL(SdParser_ReadExpectEquals(scanner));
+      SdParser_READ_EXPR(expr);
+
+      *out_node = SdAst_Set_New(env, identifier, expr);
+      identifier = NULL;
+   }
+
 end:
+   if (identifiers) SdList_Delete(identifiers);
    if (identifier) SdString_Delete(identifier);
    return result;
 }
@@ -3616,6 +3688,8 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
       case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, &discarded_result);
       case SdNodeType_VAR: return SdEngine_ExecuteVar(self, frame, statement);
       case SdNodeType_SET: return SdEngine_ExecuteSet(self, frame, statement);
+      case SdNodeType_MULTI_VAR: return SdEngine_ExecuteMultiVar(self, frame, statement);
+      case SdNodeType_MULTI_SET: return SdEngine_ExecuteMultiSet(self, frame, statement);
       case SdNodeType_IF: return SdEngine_ExecuteIf(self, frame, statement, out_return);
       case SdNodeType_FOR: return SdEngine_ExecuteFor(self, frame, statement, out_return);
       case SdNodeType_FOREACH: return SdEngine_ExecuteForEach(self, frame, statement, out_return);
@@ -3677,6 +3751,39 @@ SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r stateme
    return SdEnv_DeclareVar(self->env, frame, name, value);
 }
 
+SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+   SdResult result = SdResult_SUCCESS;
+   SdList_r names = NULL, list = NULL;
+   SdValue_r expr = NULL, list_value = NULL, element_value = NULL, name = NULL;
+   size_t i = 0, names_count = 0, list_count = 0;
+
+   assert(self);
+   assert(frame);
+   assert(statement);
+   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   assert(SdAst_NodeType(statement) == SdNodeType_MULTI_VAR);
+
+   names = SdAst_MultiVar_VariableNames(statement);
+   expr = SdAst_MultiVar_ValueExpr(statement);
+   if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &list_value)))
+      return result;
+   if (SdValue_Type(list_value) != SdType_LIST)
+      return SdFail(SdErr_TYPE_MISMATCH, "Multi-VAR statement expected a list on the right-hand side.");
+   
+   list = SdValue_GetList(list_value);
+   list_count = SdList_Count(list);
+   names_count = SdList_Count(names);
+   for (i = 0; i < names_count; i++) {
+      name = SdList_GetAt(names, i);
+      element_value = (i < list_count) ? SdList_GetAt(list, i) : SdEnv_BoxNil(self->env);
+
+      if (SdFailed(result = SdEnv_DeclareVar(self->env, frame, name, element_value)))
+         return result;
+   }
+
+   return result;
+}
+
 SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdString_r name = NULL;
@@ -3701,6 +3808,43 @@ SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r stateme
 
    /* make the assignment */
    SdEnv_VariableSlot_SetValue(slot, value);
+   return result;
+}
+
+SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+   SdResult result = SdResult_SUCCESS;
+   SdList_r names = NULL, list = NULL;
+   SdValue_r expr = NULL, list_value = NULL, element_value = NULL, slot = NULL, name = NULL;
+   size_t i = 0, names_count = 0, list_count = 0;
+
+   assert(self);
+   assert(frame);
+   assert(statement);
+   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   assert(SdAst_NodeType(statement) == SdNodeType_MULTI_SET);
+
+   names = SdAst_MultiSet_VariableNames(statement);
+   expr = SdAst_MultiSet_ValueExpr(statement);
+   if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &list_value)))
+      return result;
+   if (SdValue_Type(list_value) != SdType_LIST)
+      return SdFail(SdErr_TYPE_MISMATCH, "Multi-VAR statement expected a list on the right-hand side.");
+   
+   list = SdValue_GetList(list_value);
+   list_count = SdList_Count(list);
+   names_count = SdList_Count(names);
+   for (i = 0; i < names_count; i++) {
+      name = SdList_GetAt(names, i);
+      element_value = (i < list_count) ? SdList_GetAt(list, i) : SdEnv_BoxNil(self->env);
+
+      /* the variable slot must already exist */
+      slot = SdEnv_FindVariableSlot(self->env, frame, SdValue_GetString(name), SdTrue);
+      if (!slot)
+         return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", SdValue_GetString(name));
+
+      SdEnv_VariableSlot_SetValue(slot, element_value);
+   }
+
    return result;
 }
 
