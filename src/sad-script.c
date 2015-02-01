@@ -2724,7 +2724,19 @@ SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out
    if (is_imported) {
       body = SdAst_Body_New(env, SdList_New());
    } else {
-      SdParser_READ_BODY(body);
+      if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_BRACE) {
+         SdParser_READ_BODY(body);
+      } else {
+         SdValue_r body_expr = NULL;
+         SdList* body_statements = NULL;
+
+         SdParser_CALL(SdParser_ReadExpectEquals(scanner));
+         SdParser_READ_EXPR(body_expr);
+
+         body_statements = SdList_New();
+         SdList_Append(body_statements, SdAst_Return_New(env, body_expr));
+         body = SdAst_Body_New(env, body_statements);
+      }
    }
 
    *out_node = SdAst_Function_New(env, function_name, parameter_names, body, is_imported);
