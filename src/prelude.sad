@@ -182,7 +182,7 @@ function reverse (xs) {
    return new-list
 }
 
-function where (func xs) {
+function filter (func xs) {
    var new-list = (list)
    for x in xs {
       if (true? (func x)) {
@@ -192,7 +192,7 @@ function where (func xs) {
    return new-list
 }
 
-function select (func xs) {
+function map (func xs) {
    var new-list = (list)
    for x in xs {
       [new-list += (func x)]
@@ -200,7 +200,7 @@ function select (func xs) {
    return new-list
 }
 
-function any (xs) {
+function any? (xs) {
    return [(count xs) > 0]
 }
 

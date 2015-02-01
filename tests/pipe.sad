@@ -11,5 +11,5 @@ function print-list (lst) {
 
 var a = (list 1 2 3 4)
 
-(print-list (pipe a (where \x [[x % 2] = 0]) reverse))
-(print-list (pipe a (where \x [[x % 2] = 1]) reverse reverse))
+(print-list (pipe a (filter \x [[x % 2] = 0]) reverse))
+(print-list (pipe a (filter \x [[x % 2] = 1]) reverse reverse))
