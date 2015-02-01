@@ -1,0 +1,3 @@
+//ERROR: death message
+
+die "death message"

@@ -120,10 +120,14 @@ int main(int argc, const char* argv[]) {
    }
 
    if (strcmp(expected, actual) != 0) {
-      printf("FAIL\n");
-      printf("************ Expected:\n\"%s\"\n", expected);
-      printf("************ Actual:\n\"%s\"\n", actual);
-      printf("************\n\n\n");
+      printf("\n");
+      printf("------------------------------------------------------------------------------\n");
+      printf("TEST FAILED: %s\n\n", expected_file_path);
+      printf("---Expected---\n\n");
+      printf("%s\n\n", expected);
+      printf("---Actual---\n\n");
+      printf("%s\n\n", actual);
+      printf("------------------------------------------------------------------------------\n\n");
    }
 
 end:
