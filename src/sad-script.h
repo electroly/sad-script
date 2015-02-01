@@ -144,7 +144,8 @@ typedef enum SdTokenType_e {
    SdTokenType_IMPORT,
    SdTokenType_NIL,
    SdTokenType_ARROW,
-   SdTokenType_QUERY
+   SdTokenType_QUERY,
+   SdTokenType_LAMBDA
 } SdTokenType;
 
 typedef enum SdNodeType_e {

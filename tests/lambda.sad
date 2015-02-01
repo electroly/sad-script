@@ -3,15 +3,81 @@
 //6
 //7
 //19
+//234
+//5
+//6
+//7
+//19
+//234
+//5
+//6
+//7
+//19
+//234
+//5
+//6
+//7
+//19
 
-var f2 = :() { (println 234)}
-(f2)
+function test1 () {
+   var f2 = \() { (println 234) }
+   (f2)
 
-var f3 = :x (println x)
-(f3 5)
+   var f3 = \x (println x)
+   (f3 5)
 
-var f4 = :x { (println x) (println [x + 1])}
-(f4 6)
+   var f4 = \x { (println x) (println [x + 1]) }
+   (f4 6)
 
-var f5 = :(x y) [x + y]
-(println (f5 9 10))
+   var f5 = \(x y) [x + y]
+   (println (f5 9 10))
+}
+
+function test2 () {
+   var f2 = λ() { (println 234)}
+   (f2)
+
+   var f3 = λx (println x)
+   (f3 5)
+
+   var f4 = λx { (println x) (println [x + 1])}
+   (f4 6)
+
+   var f5 = λ(x y) [x + y]
+   (println (f5 9 10))
+}
+
+function test3 () {
+   var f2 = \ () { (println 234) }
+   (f2)
+
+   var f3 = \ x (println x)
+   (f3 5)
+
+   var f4 = \ x { (println x) (println [x + 1]) }
+   (f4 6)
+
+   var f5 = \ (x y) [x + y]
+   (println (f5 9 10))
+}
+
+function test4 () {
+   var f2 = λ () { (println 234)}
+   (f2)
+
+   var f3 = λ x (println x)
+   (f3 5)
+
+   var f4 = λ x { (println x) (println [x + 1])}
+   (f4 6)
+
+   var f5 = λ (x y) [x + y]
+   (println (f5 9 10))
+}
+
+
+(test1)
+(test2)
+(test3)
+(test4)
+

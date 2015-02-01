@@ -12,9 +12,9 @@
 <query> ::= QUERY OPEN_PAREN <expression> <query-step>* CLOSE_PAREN
 <query-step> ::= ARROW IDENTIFIER <expression>*
 <statement> ::= <call> | <infix-call> | <var> | <set> | <if> | <for> | <while> | <do> | <switch> | <return> | <die>
-<var> ::= VAR IDENTIFIER EQUALS <expression>
-<set> ::= SET IDENTIFIER EQUALS <expression>
-<closure> ::= COLON
+<var> ::= VAR (IDENTIFIER | (OPEN_PAREN IDENTIFIER+ CLOSE_PAREN)) EQUALS <expression>
+<set> ::= SET (IDENTIFIER | (OPEN_PAREN IDENTIFIER+ CLOSE_PAREN)) EQUALS <expression>
+<closure> ::= LAMBDA
    (IDENTIFIER | (OPEN_PAREN IDENTIFIER* CLOSE_PAREN))
    (<expression> | <body>)
 <if> ::= IF <expression> <body> (ELSEIF <expression> <body>)* (ELSE <body>)?
@@ -63,3 +63,4 @@ ARROW
 FROM
 QUERY
 EQUALS (subtype of IDENTIFIER)
+LAMBDA

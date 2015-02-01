@@ -464,7 +464,6 @@ SdResult SdFailWithStringSuffix(SdErr code, const char* message, SdString_r suff
    return result;
 }
 
-
 SdBool SdFailed(SdResult result) {
    return result.code != SdErr_SUCCESS;
 }
@@ -2134,9 +2133,9 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
    current_text = SdStringBuf_New();
    text_length = strlen(text);
    for (i = 0; i < text_length; i++) {
-      char ch, peek;
-      ch = text[i];
-      peek = text[i + 1];
+      unsigned char ch, peek;
+      ch = (unsigned char)text[i];
+      peek = (unsigned char)text[i + 1];
 
       if (ch == '\n')
          in_comment = SdFalse;
@@ -2195,11 +2194,20 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
          case '{':
          case '}':
          case ':':
+         case '\\':
             if (SdStringBuf_Length(current_text) > 0) {
                SdScanner_AppendToken(self, source_line, SdStringBuf_CStr(current_text));
                SdStringBuf_Clear(current_text);
             }
             break;
+      }
+
+      /* The lambda character is 0xCE 0xBB in UTF-8. */
+      if (ch == 0xCE && peek == 0xBB) {
+         if (SdStringBuf_Length(current_text) > 0) {
+            SdScanner_AppendToken(self, source_line, SdStringBuf_CStr(current_text));
+            SdStringBuf_Clear(current_text);
+         }
       }
 
       if (ch == '/' && peek == '/') {
@@ -2220,12 +2228,26 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
          case '}':
          case '[':
          case ']':
-         case ':': {
+         case ':':
+         case '\\': {
             char token_text[2] = { 0 };
             token_text[0] = ch;
             token_text[1] = 0;
             SdScanner_AppendToken(self, source_line, token_text);
             break;
+         }
+
+         case 0xCE: {
+            if (peek == 0xBB) { /* lambda character */
+               char token_text[3] = { 0 };
+               token_text[0] = ch;
+               token_text[1] = peek;
+               token_text[2] = 0;
+               SdScanner_AppendToken(self, source_line, token_text);
+               i++; /* consume the peek character */
+            } else { /* something else starting with 0xCE */
+               SdStringBuf_AppendChar(current_text, ch); /* same as default case */
+            }
          }
 
          /* Whitespace is ignored. */
@@ -2281,9 +2303,11 @@ void SdScanner_AppendToken(SdScanner_r self, int source_line, const char* token_
 SdTokenType SdScanner_ClassifyToken(const char* text) {
    assert(text);
    assert(strlen(text) > 0);
-   switch (text[0]) {
-      /* These characters are always tokens on their own, so we don't have to check the whole string. */
+
+   switch ((unsigned char)text[0]) {
       case '"': return SdTokenType_STRING_LIT;
+
+      /* These characters are always tokens on their own, so we don't have to check the whole string. */
       case '(': return SdTokenType_OPEN_PAREN;
       case ')': return SdTokenType_CLOSE_PAREN;
       case '[': return SdTokenType_OPEN_BRACKET;
@@ -2291,6 +2315,11 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
       case '{': return SdTokenType_OPEN_BRACE;
       case '}': return SdTokenType_CLOSE_BRACE;
       case ':': return SdTokenType_COLON;
+      case '\\': return SdTokenType_LAMBDA;
+
+      case 0xCE:
+         if (strlen(text) == 2 && (unsigned char)text[1] == 0xBB) return SdTokenType_LAMBDA;
+         break;
 
       /* For the rest, we use the first character to speed up the check, but we have to compare the whole string. */
       case 'a':
@@ -2576,6 +2605,7 @@ const char* SdParser_TypeString(SdTokenType type) {
       case SdTokenType_NIL: return "nil";
       case SdTokenType_ARROW: return "->";
       case SdTokenType_QUERY: return "query";
+      case SdTokenType_LAMBDA: return "\\";
       default: return "<unrecognized token type>";
    }
 }
@@ -2799,7 +2829,7 @@ SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_nod
          result = SdParser_ParseQuery(env, scanner, out_node);
          break;
 
-      case SdTokenType_COLON:
+      case SdTokenType_LAMBDA:
          result = SdParser_ParseClosure(env, scanner, out_node);
          break;
 
@@ -2878,7 +2908,7 @@ SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_
    assert(env);
    assert(scanner);
    assert(out_node);
-   SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_LAMBDA);
 
    param_names = SdList_New();
    if (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
