@@ -255,6 +255,8 @@ static SdResult SdEngine_Intrinsic_ListRemoveAt(SdEngine_r self, SdList_r argume
 static SdResult SdEngine_Intrinsic_StringLength(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_StringGetAt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_Print(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_Error(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_ErrorMessage(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -708,6 +710,12 @@ SdValue* SdValue_NewFunction(SdList* x) {
    return value;
 }
 
+SdValue* SdValue_NewError(SdList* x) {
+   SdValue* value = SdValue_NewList(x);
+   value->type = SdType_ERROR;
+   return value;
+}
+
 void SdValue_Delete(SdValue* self) {
    assert(self);
    switch (SdValue_Type(self)) {
@@ -756,7 +764,8 @@ SdList_r SdValue_GetList(SdValue_r self) {
    assert(self);
    assert(
       SdValue_Type(self) == SdType_LIST ||
-      SdValue_Type(self) == SdType_FUNCTION);
+      SdValue_Type(self) == SdType_FUNCTION ||
+      SdValue_Type(self) == SdType_ERROR);
    return self->payload.list_value;
 }
 
@@ -1380,6 +1389,12 @@ SdValue_r SdEnv_BoxFunction(SdEnv_r env, SdList* x) {
    assert(env);
    assert(x);
    return SdEnv_AddToGc(env, SdValue_NewFunction(x));
+}
+
+SdValue_r SdEnv_BoxError(SdEnv_r env, SdList* x) {
+   assert(env);
+   assert(x);
+   return SdEnv_AddToGc(env, SdValue_NewError(x));
 }
 
 SdValue_r SdEnv_Root_New(SdEnv_r env) {
@@ -3415,6 +3430,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    SdValue_r closure_slot, closure, function, call_frame = NULL;
    SdList_r param_names, partial_arguments;
    SdList* total_arguments = NULL;
+   SdString_r actual_function_name;
    size_t i, count, partial_arguments_count, total_arguments_count;
 
    assert(self);
@@ -3437,6 +3453,9 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
       goto end;
    }
    function = SdEnv_Closure_FunctionNode(closure);
+   actual_function_name = SdValue_GetString(SdAst_Function_Name(function));
+      /* we may be calling through a closure stored in a variable with an arbitrary name, so grab the actual
+         name that this function was originally defined with. */
 
    partial_arguments = SdValue_GetList(SdEnv_Closure_PartialArguments(closure));
    partial_arguments_count = SdList_Count(partial_arguments);
@@ -3448,6 +3467,21 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    if (!SdAst_Function_IsImported(function) && total_arguments_count > SdList_Count(param_names)) {
       result = SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Too many arguments to function: ", function_name);
       goto end;
+   }
+
+   /* if any of the arguments are errors, then immediately return that error so that it propagates up the call chain,
+      rather than executing the function. exception: type-of and error.message; these two functions are needed to
+      actually handle errors. */
+   if (!SdString_EqualsCStr(actual_function_name, "type-of") && 
+       !SdString_EqualsCStr(actual_function_name, "error.message")) {
+      count = SdList_Count(arguments);
+      for (i = 0; i < count; i++) {
+         SdValue_r argument = SdList_GetAt(arguments, i);
+         if (SdValue_Type(argument) == SdType_ERROR) {
+            *out_return = argument;
+            goto end;
+         }
+      }
    }
 
    /* if this is a partial function application, then construct the closure and return it. */
@@ -3486,11 +3520,11 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    /* execute the function body using the frame we just constructed */
    result = SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
 
+end:
    /* if the function did not return a value, then implicitly return a nil */
    if (!*out_return)
       *out_return = SdEnv_BoxNil(self->env);
 
-end:
    if (total_arguments) SdList_Delete(total_arguments);
    if (call_frame) SdEnv_EndFrame(self->env, call_frame);
    return result;
@@ -4102,6 +4136,8 @@ SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r argum
 
       case 'e':
          INTRINSIC("exp", SdEngine_Intrinsic_Exp);
+         INTRINSIC("error", SdEngine_Intrinsic_Error);
+         INTRINSIC("error.message", SdEngine_Intrinsic_ErrorMessage);
          break;
 
       case 'f':
@@ -4454,5 +4490,20 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Print)
    if (a_type == SdType_STRING) {
       printf("%s", SdString_CStr(SdValue_GetString(a_val)));
       *out_return = a_val;
+   }
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Error)
+   if (a_type == SdType_STRING) {
+      SdList* error_list = SdList_New();
+      SdList_Append(error_list, a_val);
+      *out_return = SdEnv_BoxError(self->env, error_list);
+   }
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ErrorMessage)
+   if (a_type == SdType_ERROR) {
+      SdList_r error_list = SdValue_GetList(a_val);
+      *out_return = SdList_GetAt(error_list, 0);
    }
 SdEngine_INTRINSIC_END

@@ -88,6 +88,10 @@ import function list.remove-at! (self index)
 import function string.length (self) 
 import function string.get-at (self index) 
 
+// error functions
+import function error (message)
+import function error.message (self)
+
 // Constants //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var TYPE-NIL = 0
@@ -97,6 +101,7 @@ var TYPE-BOOL = 3
 var TYPE-STRING = 4
 var TYPE-LIST = 5
 var TYPE-FUNCTION = 6
+var TYPE-ERROR = 7
 
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -106,6 +111,10 @@ function nil? (self) {
 
 function non-nil? (self) {
    return (not (nil? self))
+}
+
+function error? (self) {
+   return [(type-of self) = TYPE-ERROR]
 }
 
 function zero? (self) {

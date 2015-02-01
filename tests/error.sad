@@ -1,0 +1,11 @@
+//true
+//asdf
+//true
+//1234
+
+(println [(type-of (error "asdf")) = TYPE-ERROR])
+(println (error.message (error "asdf")))
+
+var a = [5 + (error "1234")]
+(println [(type-of a) = TYPE-ERROR])
+(println (error.message a))
