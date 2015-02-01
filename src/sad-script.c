@@ -172,8 +172,6 @@ static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expecte
 static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
-static SdResult SdParser_ParseQuery(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
-static SdResult SdParser_ParseQueryStep(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
@@ -191,7 +189,6 @@ static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
 
 static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value);
 static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value);
-static SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r frame, SdValue_r query, SdValue_r* out_value);
 static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value);
 static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
@@ -1809,20 +1806,6 @@ SdValue_r SdAst_VarRef_New(SdEnv_r env, SdString* identifier) {
 }
 SdAst_STRING_GETTER(SdAst_VarRef_Identifier, SdNodeType_VAR_REF, 1)
 
-SdValue_r SdAst_Query_New(SdEnv_r env, SdValue_r initial_expr, SdList* steps) {
-   SdAst_BEGIN(SdNodeType_QUERY)
-
-   assert(env);
-   SdAssertExpr(initial_expr);
-   SdAssertAllNodesOfType(steps, SdNodeType_CALL);
-
-   SdAst_VALUE(initial_expr)
-   SdAst_LIST(steps)
-   SdAst_END
-}
-SdAst_VALUE_GETTER(SdAst_Query_InitialExpr, SdNodeType_QUERY, 1)
-SdAst_LIST_GETTER(SdAst_Query_Steps, SdNodeType_QUERY, 2)
-
 /* These are SdEnv nodes "above" the AST, but it's convenient to use the same macros to implement them. */
 SdAst_LIST_GETTER(SdEnv_Root_Functions, SdNodeType_ROOT, 1)
 SdAst_LIST_GETTER(SdEnv_Root_Statements, SdNodeType_ROOT, 2)
@@ -2358,10 +2341,6 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
          if (strcmp(text, "nil") == 0) return SdTokenType_NIL;
          break;
 
-      case 'q':
-         if (strcmp(text, "query") == 0) return SdTokenType_QUERY;
-         break;
-
       case 'r':
          if (strcmp(text, "return") == 0) return SdTokenType_RETURN;
          break;
@@ -2396,7 +2375,6 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
       case '9':
       case '-':
       case '.':
-         if (strcmp(text, "->") == 0) return SdTokenType_ARROW;
          if (SdScanner_IsIntLit(text)) return SdTokenType_INT_LIT;
          if (SdScanner_IsDoubleLit(text)) return SdTokenType_DOUBLE_LIT;
          break;
@@ -2603,8 +2581,6 @@ const char* SdParser_TypeString(SdTokenType type) {
       case SdTokenType_DIE: return "die";
       case SdTokenType_IMPORT: return "import";
       case SdTokenType_NIL: return "nil";
-      case SdTokenType_ARROW: return "->";
-      case SdTokenType_QUERY: return "query";
       case SdTokenType_LAMBDA: return "\\";
       default: return "<unrecognized token type>";
    }
@@ -2825,10 +2801,6 @@ SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_nod
          result = SdParser_ParseCall(env, scanner, out_node);
          break;
 
-      case SdTokenType_QUERY:
-         result = SdParser_ParseQuery(env, scanner, out_node);
-         break;
-
       case SdTokenType_LAMBDA:
          result = SdParser_ParseClosure(env, scanner, out_node);
          break;
@@ -2839,63 +2811,6 @@ SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_nod
    }
 
 end:
-   return result;
-}
-
-SdResult SdParser_ParseQuery(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
-   SdToken_r token = NULL;
-   SdResult result = SdResult_SUCCESS;
-   SdValue_r initial_expr = NULL;
-   SdList* steps = NULL;
-
-   assert(env);
-   assert(scanner);
-   assert(out_node);
-   SdParser_READ_EXPECT_TYPE(SdTokenType_QUERY);
-   SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
-   SdParser_READ_EXPR(initial_expr);
-
-   steps = SdList_New();
-   while (SdScanner_PeekType(scanner) == SdTokenType_ARROW) {
-      SdValue_r step = NULL;
-      SdParser_CALL(SdParser_ParseQueryStep(env, scanner, &step));
-      assert(step);
-      SdList_Append(steps, step);
-   }
-
-   SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
-
-   *out_node = SdAst_Query_New(env, initial_expr, steps);
-   steps = NULL;
-end:
-   if (steps) SdList_Delete(steps);
-   return result;
-}
-
-SdResult SdParser_ParseQueryStep(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
-   SdToken_r token = NULL;
-   SdResult result = SdResult_SUCCESS;
-   SdString* function_name = NULL;
-   SdList* arguments = NULL;
-
-   assert(env);
-   assert(scanner);
-   assert(out_node);
-   SdParser_READ_IDENTIFIER(function_name);
-
-   arguments = SdList_New();
-   while (SdScanner_PeekType(scanner) != SdTokenType_ARROW) {
-      SdValue_r argument_expr = NULL;
-      SdParser_READ_EXPR(argument_expr);
-      SdList_Append(arguments, argument_expr);
-   }
-
-   *out_node = SdAst_Call_New(env, function_name, arguments);
-   function_name = NULL;
-   arguments = NULL;
-end:
-   if (function_name) SdString_Delete(function_name);
-   if (arguments) SdList_Delete(arguments);
    return result;
 }
 
@@ -3599,10 +3514,6 @@ SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr,
          result = SdEngine_EvaluateVarRef(self, frame, expr, out_value);
          break;
 
-      case SdNodeType_QUERY:
-         result = SdEngine_EvaluateQuery(self, frame, expr, out_value);
-         break;
-
       case SdNodeType_CALL:
          result = SdEngine_ExecuteCall(self, frame, expr, out_value);
          break;
@@ -3636,62 +3547,6 @@ SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var
       return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", identifier);
    *out_value = SdEnv_VariableSlot_Value(slot);
    return SdResult_SUCCESS;
-}
-
-SdResult SdEngine_EvaluateQuery(SdEngine_r self, SdValue_r frame, SdValue_r query, SdValue_r* out_value) {
-   SdResult result = SdResult_SUCCESS;
-   SdList* argument_values = NULL;
-   SdValue_r value = NULL, step_frame = NULL;
-   SdList_r steps = NULL;
-   size_t i = 0, count = 0;
-
-   assert(self);
-   assert(frame);
-   assert(query);
-   assert(out_value);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(query) == SdNodeType_QUERY);
-
-   if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, SdAst_Query_InitialExpr(query), &value)))
-      return result;
-
-   steps = SdAst_Query_Steps(query);
-   count = SdList_Count(steps);
-   for (i = 0; i < count; i++) {
-      SdList_r argument_exprs = NULL;
-      SdValue_r call = NULL;
-      size_t j = 0, num_arguments = 0;
-
-      call = SdList_GetAt(steps, i);
-      step_frame = SdEnv_BeginFrame(self->env, frame);
-
-      argument_exprs = SdAst_Call_Arguments(call);
-      argument_values = SdList_New();
-      SdList_Append(argument_values, value);
-      num_arguments = SdList_Count(argument_exprs);
-
-      for (j = 0; j < num_arguments; j++) {
-         SdValue_r argument_expr = NULL, argument_value = NULL;
-         argument_expr = SdList_GetAt(argument_exprs, j);
-         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, argument_expr, &argument_value))) 
-            goto end;
-         SdList_Append(argument_values, argument_value);
-      }
-
-      if (SdFailed(result = SdEngine_Call(self, step_frame, SdAst_Call_FunctionName(call), argument_values, &value)))
-         goto end;
-
-      SdList_Delete(argument_values);
-      argument_values = NULL;
-      SdEnv_EndFrame(self->env, step_frame);
-      step_frame = NULL;
-   }
-
-   *out_value = value;
-end:
-   if (argument_values) SdList_Delete(argument_values);
-   if (step_frame) SdEnv_EndFrame(self->env, step_frame);
-   return result;
 }
 
 SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value) {

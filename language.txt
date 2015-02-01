@@ -6,11 +6,9 @@
    (FUNCTION IDENTIFIER OPEN_PAREN IDENTIFIER* CLOSE_PAREN <body>) |
    (IMPORT FUNCTION IDENTIFIER OPEN_PAREN IDENTIFIER* CLOSE_PAREN)
 <body> ::= OPEN_BRACE <statement>* CLOSE_BRACE
-<expression> ::= INT_LIT | DOUBLE_LIT | BOOL_LIT | STRING_LIT | NIL | <call> | <infix-call> | IDENTIFIER | <query> | <closure>
+<expression> ::= INT_LIT | DOUBLE_LIT | BOOL_LIT | STRING_LIT | NIL | <call> | <infix-call> | IDENTIFIER | <closure>
 <call> ::= OPEN_PAREN IDENTIFIER <expression>* CLOSE_PAREN
 <infix-call> ::= OPEN_BRACKET <expression> IDENTIFIER <expression>* CLOSE_BRACKET
-<query> ::= QUERY OPEN_PAREN <expression> <query-step>* CLOSE_PAREN
-<query-step> ::= ARROW IDENTIFIER <expression>*
 <statement> ::= <call> | <infix-call> | <var> | <set> | <if> | <for> | <while> | <do> | <switch> | <return> | <die>
 <var> ::= VAR (IDENTIFIER | (OPEN_PAREN IDENTIFIER+ CLOSE_PAREN)) EQUALS <expression>
 <set> ::= SET (IDENTIFIER | (OPEN_PAREN IDENTIFIER+ CLOSE_PAREN)) EQUALS <expression>
@@ -59,8 +57,6 @@ RETURN
 DIE
 IMPORT
 NIL
-ARROW
 FROM
-QUERY
 EQUALS (subtype of IDENTIFIER)
 LAMBDA

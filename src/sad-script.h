@@ -143,8 +143,6 @@ typedef enum SdTokenType_e {
    SdTokenType_DIE,
    SdTokenType_IMPORT,
    SdTokenType_NIL,
-   SdTokenType_ARROW,
-   SdTokenType_QUERY,
    SdTokenType_LAMBDA
 } SdTokenType;
 
@@ -169,24 +167,23 @@ typedef enum SdNodeType_e {
    SdNodeType_STRING_LIT = 10,
    SdNodeType_NIL_LIT = 11,
    SdNodeType_VAR_REF = 12,
-   SdNodeType_QUERY = 13,
 
    /* Statement or expression (depending on the context) */
-   SdNodeType_CALL = 14,
+   SdNodeType_CALL = 13,
 
    /* Statements */
-   SdNodeType_VAR = 15,
-   SdNodeType_SET = 16,
-   SdNodeType_IF = 17,
-   SdNodeType_ELSEIF = 18,
-   SdNodeType_FOR = 19,
-   SdNodeType_FOREACH = 20,
-   SdNodeType_WHILE = 21,
-   SdNodeType_DO = 22,
-   SdNodeType_SWITCH = 23,
-   SdNodeType_CASE = 24,
-   SdNodeType_RETURN = 25,
-   SdNodeType_DIE = 26,
+   SdNodeType_VAR = 14,
+   SdNodeType_SET = 15,
+   SdNodeType_IF = 16,
+   SdNodeType_ELSEIF = 17,
+   SdNodeType_FOR = 18,
+   SdNodeType_FOREACH = 19,
+   SdNodeType_WHILE = 20,
+   SdNodeType_DO = 21,
+   SdNodeType_SWITCH = 22,
+   SdNodeType_CASE = 23,
+   SdNodeType_RETURN = 24,
+   SdNodeType_DIE = 25,
 
    SdNodeType_BLOCKS_FIRST = SdNodeType_PROGRAM,
    SdNodeType_BLOCKS_LAST = SdNodeType_FUNCTION,
@@ -370,7 +367,6 @@ SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r en
       (list STRING_LIT | Str)                  |                     |               | 
       (list NIL_LIT)   |                       |                     |               | 
       (list VAR_REF    | identifier:Str)       |                     |               | 
-      (list QUERY      | Expr                  | Lst<Call>)          |               | 
       (list CALL ^     | ...                   |                     |               | 
       (list FUNCTION ^ | ...                   |                     |               | 
    Body: --------------+-----------------------+---------------------+---------------+-------------------
@@ -468,10 +464,6 @@ SdValue_r      SdAst_NilLit_New(SdEnv_r env);
 
 SdValue_r      SdAst_VarRef_New(SdEnv_r env, SdString* identifier);
 SdString_r     SdAst_VarRef_Identifier(SdValue_r self);
-
-SdValue_r      SdAst_Query_New(SdEnv_r env, SdValue_r initial_expr, SdList* steps);
-SdValue_r      SdAst_Query_InitialExpr(SdValue_r self);
-SdList_r       SdAst_Query_Steps(SdValue_r self);
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet*    SdValueSet_New(void);
