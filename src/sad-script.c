@@ -92,7 +92,7 @@ struct SdList_s {
    SdValue_r* values;
    size_t count;
 #ifdef SD_DEBUG
-   SdBool is_boxed; /* whether this string has been boxed already */
+   SdBool is_boxed; /* whether this list has been boxed already */
 #endif
 };
 
@@ -151,6 +151,7 @@ static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame)
 
 static SdValue_r SdAst_NodeValue(SdValue_r node, size_t value_index);
 static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_values);
+static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t num_values);
 
 static int SdValueSet_CompareFunc(SdValue_r lhs, void* context);
 
@@ -701,6 +702,12 @@ SdValue* SdValue_NewList(SdList* x) {
    return value;
 }
 
+SdValue* SdValue_NewFunction(SdList* x) {
+   SdValue* value = SdValue_NewList(x);
+   value->type = SdType_FUNCTION;
+   return value;
+}
+
 void SdValue_Delete(SdValue* self) {
    assert(self);
    switch (SdValue_Type(self)) {
@@ -747,7 +754,9 @@ SdString_r SdValue_GetString(SdValue_r self) {
 
 SdList_r SdValue_GetList(SdValue_r self) {
    assert(self);
-   assert(SdValue_Type(self) == SdType_LIST);
+   assert(
+      SdValue_Type(self) == SdType_LIST ||
+      SdValue_Type(self) == SdType_FUNCTION);
    return self->payload.list_value;
 }
 
@@ -1367,6 +1376,12 @@ SdValue_r SdEnv_BoxList(SdEnv_r env, SdList* x) {
    return SdEnv_AddToGc(env, SdValue_NewList(x));
 }
 
+SdValue_r SdEnv_BoxFunction(SdEnv_r env, SdList* x) {
+   assert(env);
+   assert(x);
+   return SdEnv_AddToGc(env, SdValue_NewFunction(x));
+}
+
 SdValue_r SdEnv_Root_New(SdEnv_r env) {
    SdValue_r frame;
    SdList* root_list;
@@ -1449,6 +1464,20 @@ SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
       SdList_Append(node, values[i]);
    }
    return SdEnv_BoxList(env, node);
+}
+
+SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
+   SdList* node;
+   size_t i;
+
+   assert(env);
+   assert(values);
+   node = SdList_New();
+   for (i = 0; i < num_values; i++) {
+      assert(values[i]);
+      SdList_Append(node, values[i]);
+   }
+   return SdEnv_BoxFunction(env, node);
 }
 
 SdValue_r SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* statements) {
@@ -1833,7 +1862,7 @@ SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names,
    SdAst_VALUE(param_names)
    SdAst_VALUE(function_node)
    SdAst_VALUE(partial_arguments)
-   SdAst_END
+   return SdAst_NewFunctionNode(env, values, i);
 }
 SdAst_VALUE_GETTER(SdEnv_Closure_Frame, SdNodeType_CLOSURE, 1)
 SdAst_VALUE_GETTER(SdEnv_Closure_ParameterNames, SdNodeType_CLOSURE, 2)
@@ -3403,7 +3432,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    }
 
    closure = SdEnv_VariableSlot_Value(closure_slot);
-   if (SdAst_NodeType(closure) != SdNodeType_CLOSURE) {
+   if (SdValue_Type(closure) != SdType_FUNCTION || SdAst_NodeType(closure) != SdNodeType_CLOSURE) {
       result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
       goto end;
    }

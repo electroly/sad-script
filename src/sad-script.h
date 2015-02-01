@@ -98,7 +98,8 @@ typedef enum SdType_e {
    SdType_DOUBLE = 2,
    SdType_BOOL = 3,
    SdType_STRING = 4,
-   SdType_LIST = 5
+   SdType_LIST = 5,
+   SdType_FUNCTION = 6 /* really just a list, but with a unique type to signify that it's a closure */
 } SdType;
 
 typedef enum SdTokenType_e {
@@ -241,6 +242,7 @@ SdValue*       SdValue_NewDouble(double x);
 SdValue*       SdValue_NewBool(SdBool x);
 SdValue*       SdValue_NewString(SdString* x);
 SdValue*       SdValue_NewList(SdList* x);
+SdValue*       SdValue_NewFunction(SdList* x);
 void           SdValue_Delete(SdValue* self);
 SdType         SdValue_Type(SdValue_r self);
 int            SdValue_GetInt(SdValue_r self);
@@ -308,6 +310,7 @@ SdValue_r      SdEnv_BoxDouble(SdEnv_r env, double x);
 SdValue_r      SdEnv_BoxBool(SdEnv_r env, SdBool x);
 SdValue_r      SdEnv_BoxString(SdEnv_r env, SdString* x);
 SdValue_r      SdEnv_BoxList(SdEnv_r env, SdList* x);
+SdValue_r      SdEnv_BoxFunction(SdEnv_r env, SdList* x);
 
 SdValue_r      SdEnv_Root_New(SdEnv_r env);
 SdList_r       SdEnv_Root_Functions(SdValue_r self);
