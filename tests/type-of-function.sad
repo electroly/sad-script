@@ -6,11 +6,11 @@
 function f1 () {}
 (println [(type-of f1) = TYPE-FUNCTION])
 
-var f2 = :() {}
+var f2 = \() {}
 (println [(type-of f2) = TYPE-FUNCTION])
 
-var f3 = :x {}
+var f3 = \x {}
 (println [(type-of f3) = TYPE-FUNCTION])
 
-var f4 = :(x y) {}
+var f4 = \(x y) {}
 (println [(type-of f4) = TYPE-FUNCTION])
