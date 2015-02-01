@@ -249,7 +249,6 @@ static SdResult SdEngine_Intrinsic_GreaterThan(SdEngine_r self, SdList_r argumen
 static SdResult SdEngine_Intrinsic_GreaterThanEquals(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ShiftLeft(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ShiftRight(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
-static SdResult SdEngine_Intrinsic_List(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListLength(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListGetAt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListSetAt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
@@ -1416,7 +1415,7 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
 
 /* SdAst *************************************************************************************************************/
 /* A simple macro-based DSL for implementing the AST node functions. */
-#define SdAst_MAX_NODE_VALUES 5
+#define SdAst_MAX_NODE_VALUES 6
 #define SdAst_BEGIN(node_type) \
    SdValue_r values[SdAst_MAX_NODE_VALUES]; \
    int i = 0; \
@@ -1513,7 +1512,7 @@ SdAst_LIST_GETTER(SdAst_Program_Functions, SdNodeType_PROGRAM, 1)
 SdAst_LIST_GETTER(SdAst_Program_Statements, SdNodeType_PROGRAM, 2)
 
 SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
-   SdBool is_imported) {
+   SdBool is_imported, SdBool has_var_args) {
    SdAst_BEGIN(SdNodeType_FUNCTION)
 
    assert(env);
@@ -1525,12 +1524,14 @@ SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* param
    SdAst_LIST(parameter_names)
    SdAst_VALUE(body)
    SdAst_BOOL(is_imported)
+   SdAst_BOOL(has_var_args)
    SdAst_END
 }
 SdAst_VALUE_GETTER(SdAst_Function_Name, SdNodeType_FUNCTION, 1)
 SdAst_VALUE_GETTER(SdAst_Function_ParameterNames, SdNodeType_FUNCTION, 2)
 SdAst_VALUE_GETTER(SdAst_Function_Body, SdNodeType_FUNCTION, 3)
 SdAst_BOOL_GETTER(SdAst_Function_IsImported, SdNodeType_FUNCTION, 4)
+SdAst_BOOL_GETTER(SdAst_Function_HasVariableLengthArgumentList, SdNodeType_FUNCTION, 5)
 
 SdValue_r SdAst_Body_New(SdEnv_r env, SdList* statements) {
    SdAst_BEGIN(SdNodeType_BODY)
@@ -2700,6 +2701,7 @@ SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out
    SdString* function_name = NULL;
    SdList* parameter_names = NULL;
    SdValue_r body = NULL;
+   SdBool has_var_args = SdFalse;
 
    assert(env);
    assert(scanner);
@@ -2712,14 +2714,21 @@ SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out
    SdParser_READ_EXPECT_TYPE(SdTokenType_FUNCTION);
    SdParser_READ_IDENTIFIER(function_name);
    
-   SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
    parameter_names = SdList_New();
-   while (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
+   if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_PAREN) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
+      while (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
+         SdString* param_name = NULL;
+         SdParser_READ_IDENTIFIER(param_name);
+         SdList_Append(parameter_names, SdEnv_BoxString(env, param_name));
+      }
+      SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
+   } else {
       SdString* param_name = NULL;
       SdParser_READ_IDENTIFIER(param_name);
       SdList_Append(parameter_names, SdEnv_BoxString(env, param_name));
+      has_var_args = SdTrue;
    }
-   SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
 
    if (is_imported) {
       body = SdAst_Body_New(env, SdList_New());
@@ -2739,7 +2748,7 @@ SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out
       }
    }
 
-   *out_node = SdAst_Function_New(env, function_name, parameter_names, body, is_imported);
+   *out_node = SdAst_Function_New(env, function_name, parameter_names, body, is_imported, has_var_args);
    function_name = NULL;
    parameter_names = NULL;
 end:
@@ -2894,7 +2903,7 @@ SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_
       body = SdAst_Body_New(env, statements);
    }
 
-   *out_node = SdAst_Function_New(env, SdString_FromCStr("(closure)"), param_names, body, SdFalse);
+   *out_node = SdAst_Function_New(env, SdString_FromCStr("(closure)"), param_names, body, SdFalse, SdFalse);
    param_names = NULL;
 end:
    if (param_names) SdList_Delete(param_names);
@@ -3465,6 +3474,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    SdList_r param_names = NULL, partial_arguments = NULL;
    SdList* total_arguments = NULL;
    SdString_r actual_function_name = NULL;
+   SdBool has_var_args = SdFalse;
    size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
 
    assert(self);
@@ -3496,9 +3506,10 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    total_arguments_count = partial_arguments_count + SdList_Count(arguments);
 
    /* ensure that the argument list matches the parameter list. skip the check for intrinsics since they are more 
-      flexible and will do the check themselves. */
+      flexible and will do the check themselves. also skip the check for variable argument functions. */
    param_names = SdValue_GetList(SdEnv_Closure_ParameterNames(closure));
-   if (!SdAst_Function_IsImported(function) && total_arguments_count > SdList_Count(param_names)) {
+   has_var_args = SdAst_Function_HasVariableLengthArgumentList(function);
+   if (!SdAst_Function_IsImported(function) && !has_var_args && total_arguments_count > SdList_Count(param_names)) {
       result = SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Too many arguments to function: ", function_name);
       goto end;
    }
@@ -3519,7 +3530,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    }
 
    /* if this is a partial function application, then construct the closure and return it. */
-   if (total_arguments_count < SdList_Count(param_names)) {
+   if (!has_var_args && total_arguments_count < SdList_Count(param_names)) {
       *out_return = SdEnv_Closure_CopyWithPartialArguments(closure, self->env, arguments);
       goto end;
    }
@@ -3541,14 +3552,24 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
 
    /* create a frame containing the argument values */
    call_frame = SdEnv_BeginFrame(self->env, SdEnv_Closure_Frame(closure));
-   count = SdList_Count(total_arguments);
-   for (i = 0; i < count; i++) {
-      SdValue_r param_name, arg_value;
-      
-      param_name = SdList_GetAt(param_names, i);
-      arg_value = SdList_GetAt(total_arguments, i);
-      if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, arg_value)))
+   if (has_var_args) {
+      SdValue_r param_name = NULL, args_value = NULL;
+
+      param_name = SdList_GetAt(param_names, 0);
+      args_value = SdEnv_BoxList(self->env, total_arguments);
+      total_arguments = NULL;
+      if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, args_value)))
          goto end;
+   } else {
+      count = SdList_Count(total_arguments);
+      for (i = 0; i < count; i++) {
+         SdValue_r param_name, arg_value;
+         
+         param_name = SdList_GetAt(param_names, i);
+         arg_value = SdList_GetAt(total_arguments, i);
+         if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, arg_value)))
+            goto end;
+      }
    }
 
    /* execute the function body using the frame we just constructed */
@@ -4201,7 +4222,6 @@ SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r argum
       case 'l':
          INTRINSIC("log", SdEngine_Intrinsic_Log);
          INTRINSIC("log10", SdEngine_Intrinsic_Log10);
-         INTRINSIC("list", SdEngine_Intrinsic_List);
          INTRINSIC("list.length", SdEngine_Intrinsic_ListLength);
          INTRINSIC("list.get-at", SdEngine_Intrinsic_ListGetAt);
          INTRINSIC("list.set-at!", SdEngine_Intrinsic_ListSetAt);
@@ -4448,15 +4468,6 @@ SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_GreaterThanEquals, a
    strcmp(SdString_CStr(a), SdString_CStr(b)) >= 0)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftLeft, a << b)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftRight, a >> b)
-
-SdResult SdEngine_Intrinsic_List(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) {
-   assert(self);
-   assert(arguments);
-   assert(out_return);
-
-   *out_return = SdEnv_BoxList(self->env, SdList_Clone(arguments));
-   return SdResult_SUCCESS;
-}
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ListLength)
    if (a_type == SdType_LIST) {

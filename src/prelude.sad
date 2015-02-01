@@ -77,7 +77,6 @@ import function << (a b)
 import function >> (a b)
 
 // list functions
-import function list ()
 import function list.length (self) 
 import function list.get-at (self index) 
 import function list.set-at! (self index value) 
@@ -105,33 +104,15 @@ var TYPE-ERROR = 7
 
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function nil? (self) {
-   return [(type-of self) = TYPE-NIL]
-}
-
-function non-nil? (self) {
-   return (not (nil? self))
-}
-
-function error? (self) {
-   return [(type-of self) = TYPE-ERROR]
-}
-
-function zero? (self) {
-   return [[(type-of self) = TYPE-INT] and [self = 0]]
-}
-
-function true? (self) {
-   return [[(type-of self) = TYPE-BOOL] and [self = true]]
-}
-
-function false? (self) {
-   return [[(type-of self) = TYPE-BOOL] and [self = false]]
-}
-
-function printv (x) {
-   (print (to-string x))
-}
+function list xs = xs
+function nil? (self) = [(type-of self) = TYPE-NIL]
+function non-nil? (self) = (not (nil? self))
+function error? (self) = [(type-of self) = TYPE-ERROR]
+function zero? (self) = [[(type-of self) = TYPE-INT] and [self = 0]]
+function true? (self) = [[(type-of self) = TYPE-BOOL] and [self = true]]
+function false? (self) = [[(type-of self) = TYPE-BOOL] and [self = false]]
+function printv (x) = (print (to-string x))
+function != (a b) = (not [a = b])
 
 function println (x) {
    (printv x)
@@ -143,9 +124,7 @@ function list.append! (self value) {
    [self list.insert-at! index value]
 }
 
-function += (collection item) {
-   [collection list.append! item]
-}
+function += (collection item) = [collection list.append! item]
 
 function @ (self index) {
    switch (type-of self) {
@@ -165,10 +144,6 @@ function @= (self index value) {
    [collection list.set-at! index value]
 }
 
-function != (a b) {
-   return (not [a = b])
-}
-
 function length (self) {
    switch (type-of self) {
       case TYPE-STRING {
@@ -185,18 +160,31 @@ function length (self) {
 
 // Queries ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function reverse (list) {
+function pipe pipeline {
+   var pipeline-length = (list.length pipeline)
+   var value = nil
+   for step in pipeline {
+      if [(type-of step) = TYPE-FUNCTION] {
+         set value = (step value)
+      } else {
+         set value = step
+      }
+   }
+   return value
+}
+
+function reverse (xs) {
    var new-list = (list)
-   var last-index = [(count list) - 1]
+   var last-index = [(list.length xs) - 1]
    for i from 0 to last-index {
-      [new-list += [list @ [last-index - i]]]
+      [new-list += [xs @ [last-index - i]]]
    }
    return new-list
 }
 
-function where (list func) {
+function where (func xs) {
    var new-list = (list)
-   for x in list {
+   for x in xs {
       if (true? (func x)) {
          [new-list += x]
       }
@@ -204,16 +192,16 @@ function where (list func) {
    return new-list
 }
 
-function select (list func) {
+function select (func xs) {
    var new-list = (list)
-   for x in list {
+   for x in xs {
       [new-list += (func x)]
    }
    return new-list
 }
 
-function any (list) {
-   return [(count list) > 0]
+function any (xs) {
+   return [(count xs) > 0]
 }
 
 // dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////

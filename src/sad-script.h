@@ -341,40 +341,40 @@ SdValue_r      SdEnv_Closure_PartialArguments(SdValue_r self);
 SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments);
 
 /* SdAst **************************************************************************************************************
-               0       |    1                    |    2                |    3          |    4
-   Program: -----------+-------------------------+---------------------+---------------+-------------------
-      (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |               | 
-   Function: ----------+-------------------------+---------------------+---------------+-------------------
-      (list FUNCTION   | name:Str                | params:Lst<Str>     | Body          | is-imported:Bool)
-   Statement: ---------+-------------------------+---------------------+---------------+-------------------
-      (list CALL       | function-name:Str       | args:Lst<Expr>)     |               | 
-      (list VAR        | variable-name:Str       | value:Expr)         |               |
-      (list SET        | variable-name:Str       | value:Expr)         |               |
-      (list MULTI_VAR  | variable-names:Lst<Str> | value:Expr)         |               |
-      (list MULTI_SET  | variable-names:Lst<Str> | value:Expr)         |               |
-      (list IF         | condition:Expr          | if-true:Body        | Lst<ElseIf>   | else:Body)
-      (list FOR        | variable-name:Str       | start:Expr          | stop:Expr     | Body)
-      (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr | Body)
-      (list WHILE      | condition:Expr          | Body)               |               | 
-      (list DO         | condition:Expr          | Body)               |               | 
-      (list SWITCH     | Expr                    | Lst<Case>           | default:Body) | 
-      (list RETURN     | Expr)                   |                     |               | 
-      (list DIE        | Expr)                   |                     |               | 
-   ElseIf: ------------+-------------------------+---------------------+---------------+-------------------
-      (list ELSEIF     | condition:Expr          | Body)               |               | 
-   Case: --------------+-------------------------+---------------------+---------------+-------------------
-      (list CASE       | Expr                    | Body)               |               | 
-   Expr: --------------+-------------------------+---------------------+---------------+-------------------
-      (list INT_LIT    | Int)                    |                     |               | 
-      (list DOUBLE_LIT | Double)                 |                     |               | 
-      (list BOOL_LIT   | Bool)                   |                     |               | 
-      (list STRING_LIT | Str)                    |                     |               | 
-      (list NIL_LIT)   |                         |                     |               | 
-      (list VAR_REF    | identifier:Str)         |                     |               | 
-      (list CALL ^     | ...                     |                     |               | 
-      (list FUNCTION ^ | ...                     |                     |               | 
-   Body: --------------+-------------------------+---------------------+---------------+-------------------
-      (list BODY       | Lst<Statement>)         |                     |               | 
+               0       |    1                    |    2                |    3          |    4          |    5
+   Program: -----------+-------------------------+---------------------+---------------+---------------|---------------
+      (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |               |               |
+   Function: ----------+-------------------------+---------------------+---------------+---------------|---------------
+      (list FUNCTION   | name:Str                | params:Lst<Str>     | Body          | imported:Bool | var-args:Bool)
+   Statement: ---------+-------------------------+---------------------+---------------+---------------|---------------
+      (list CALL       | function-name:Str       | args:Lst<Expr>)     |               |               | 
+      (list VAR        | variable-name:Str       | value:Expr)         |               |               | 
+      (list SET        | variable-name:Str       | value:Expr)         |               |               | 
+      (list MULTI_VAR  | variable-names:Lst<Str> | value:Expr)         |               |               | 
+      (list MULTI_SET  | variable-names:Lst<Str> | value:Expr)         |               |               | 
+      (list IF         | condition:Expr          | if-true:Body        | Lst<ElseIf>   | else:Body)    | 
+      (list FOR        | variable-name:Str       | start:Expr          | stop:Expr     | Body)         | 
+      (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr | Body)         | 
+      (list WHILE      | condition:Expr          | Body)               |               |               | 
+      (list DO         | condition:Expr          | Body)               |               |               | 
+      (list SWITCH     | Expr                    | Lst<Case>           | default:Body) |               | 
+      (list RETURN     | Expr)                   |                     |               |               | 
+      (list DIE        | Expr)                   |                     |               |               | 
+   ElseIf: ------------+-------------------------+---------------------+---------------+---------------|---------------
+      (list ELSEIF     | condition:Expr          | Body)               |               |               | 
+   Case: --------------+-------------------------+---------------------+---------------+---------------|---------------
+      (list CASE       | Expr                    | Body)               |               |               | 
+   Expr: --------------+-------------------------+---------------------+---------------+---------------|---------------
+      (list INT_LIT    | Int)                    |                     |               |               | 
+      (list DOUBLE_LIT | Double)                 |                     |               |               | 
+      (list BOOL_LIT   | Bool)                   |                     |               |               | 
+      (list STRING_LIT | Str)                    |                     |               |               | 
+      (list NIL_LIT)   |                         |                     |               |               | 
+      (list VAR_REF    | identifier:Str)         |                     |               |               | 
+      (list CALL ^     | ...                     |                     |               |               | 
+      (list FUNCTION ^ | ...                     |                     |               |               | 
+   Body: --------------+-------------------------+---------------------+---------------+---------------|---------------
+      (list BODY       | Lst<Statement>)         |                     |               |               | 
 */
 SdNodeType     SdAst_NodeType(SdValue_r node);
 
@@ -383,11 +383,12 @@ SdList_r       SdAst_Program_Functions(SdValue_r self);
 SdList_r       SdAst_Program_Statements(SdValue_r self);
 
 SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
-                  SdBool is_imported);
+                  SdBool is_imported, SdBool has_var_args);
 SdValue_r      SdAst_Function_Name(SdValue_r self);
 SdValue_r      SdAst_Function_Body(SdValue_r self);
 SdValue_r      SdAst_Function_ParameterNames(SdValue_r self);
 SdBool         SdAst_Function_IsImported(SdValue_r self);
+SdBool         SdAst_Function_HasVariableLengthArgumentList(SdValue_r self);
 
 SdValue_r      SdAst_Body_New(SdEnv_r env, SdList* statements);
 SdList_r       SdAst_Body_Statements(SdValue_r self);
