@@ -1,15 +1,17 @@
-# CC may be overridden on the command line.  Try gcc or tcc.
+# CC may be overridden on the command line.  Try 'gcc' or 'tcc'.  On Windows try 'msvc' to use the VS 2013 compiler.
 CC=gcc
+CC2=$(CC)
+CFLAGS=
+LFLAGS=
 
 ifeq ($(CC),gcc)
 	CFLAGS=-ansi -pedantic -Wall -Wextra -Werror -O2 -x c
-else
-	CFLAGS=
+	LFLAGS=-lm
 endif
 
-ifeq ($(CC),gcc)
-	LFLAGS=-lm
-else
+ifeq ($(CC),msvc)
+	CC2=cmd /K msvc-cl.bat
+	CFLAGS=
 	LFLAGS=
 endif
 
@@ -23,10 +25,10 @@ TESTRESULTS=$(TESTS:tests/%.sad=testresults/%.testresult)
 all: bin/sad bin/sad-test
 
 bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
-	$(CC) $(CFLAGS) $(LFLAGS) $(SAD_SOURCES) -o $@
+	$(CC2) $(CFLAGS) $(LFLAGS) $(SAD_SOURCES) -o $@
 
 bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
-	$(CC) $(CFLAGS) $(LFLAGS) $(SAD_TEST_SOURCES) -o $@
+	$(CC2) $(CFLAGS) $(LFLAGS) $(SAD_TEST_SOURCES) -o $@
 
 bin/prelude.sad: src/prelude.sad
 	cp src/prelude.sad bin/prelude.sad
@@ -38,12 +40,10 @@ testresults:
 	mkdir testresults
 
 cleantests:
-	@rm -f $(TESTRESULTS)
+	@rm -f testresults/*
 
 clean: cleantests
-	@rm -f bin/sad bin/sad.exe
-	@rm -f bin/sad-test bin/sad-test.exe
-	@rm -f bin/prelude.sad
+	@rm -f bin/*
 
 test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 

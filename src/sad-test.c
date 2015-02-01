@@ -18,9 +18,18 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS 1
+#pragma warning(push, 0) /* ignore warnings in system headers */
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef _MSC_VER
+#pragma warning(pop) /* start showing warnings again */
+#endif
 
 static char* ReadActualFile(const char* file_path) {
    FILE* fp;
@@ -33,9 +42,16 @@ static char* ReadActualFile(const char* file_path) {
       return NULL;
 
    str = calloc(1, 1);
+   if (!str)
+      exit(-1);
    while (fgets(buf, sizeof(buf), fp)) {
+      char* new_str;
       size_t new_len = strlen(buf);
-      str = realloc(str, len + new_len + 1);
+      new_str = realloc(str, len + new_len + 1);
+      if (!new_str)
+         exit(-1);
+      else
+         str = new_str;
       memcpy(&str[len], buf, new_len);
       len += new_len;
       str[len] = 0;
@@ -64,12 +80,19 @@ static char* ReadExpectedFile(const char* file_path) {
       return NULL;
 
    str = calloc(1, 1);
+   if (!str)
+      exit(-1);
    while (fgets(buf, sizeof(buf), fp)) {
       size_t new_len;
 
       if (strlen(buf) > 2 && buf[0] == '/' && buf[1] == '/') {
+         char* new_str;
          new_len = strlen(buf) - 2;
-         str = realloc(str, len + new_len + 1);
+         new_str = realloc(str, len + new_len + 1);
+         if (new_str)
+            str = new_str;
+         else
+            exit(-1);
          memcpy(&str[len], &buf[2], new_len);
          len += new_len;
          str[len] = 0;

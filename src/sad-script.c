@@ -51,6 +51,7 @@
 #ifdef _MSC_VER
 #pragma warning(disable: 4820) /* '4' bytes padding added after data member '...' */
 #pragma warning(disable: 4127) /* conditional expression is constant */
+#pragma warning(disable: 4711) /* function '...' selected for automatic inline expansion */
 #endif
 
 #define SD_NUM_ALLOCATIONS_PER_GC 10000
@@ -320,6 +321,8 @@ static void SdAssertNonEmptyString(SdString_r x) {
 
 #ifdef SD_DEBUG
 void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
+   if (!ptr)
+      exit(-1);
    memset(ptr, 0, size);
    /*printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
    (void)line;
@@ -408,11 +411,24 @@ static void SdDebugDumpChain(SdChain_r chain) {
    }
 }
 #else /* SD_DEBUG */
-#define SdAlloc(size) calloc(1, (size))
+void* SdAlloc(size_t size) {
+   void* ptr = calloc(1, size);
+   if (!ptr)
+      exit(-1);
+   return ptr;
+}
 #define SdFree(ptr) free((ptr))
 #endif
 
-#define SdRealloc(ptr, size) realloc(ptr, size)
+void* SdRealloc(void* ptr, size_t size) {
+   void* new_ptr = realloc(ptr, size);
+   /* If there is not enough available memory to expand the block to the given size, the original block is left 
+      unchanged, and NULL is returned. */
+   if (new_ptr)
+      return new_ptr;
+   else
+      exit(-1);
+}
 
 char* SdStrdup(const char* src) {
    size_t length = 0;
@@ -1299,6 +1315,7 @@ SdResult SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue
 SdValue_r SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse) {
    SdValue_r value = NULL;
 
+   (void)self;
    assert(self);
    assert(frame);
    assert(name);
@@ -4563,6 +4580,7 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Error)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ErrorMessage)
+   (void)self;
    if (a_type == SdType_ERROR) {
       SdList_r error_list = SdValue_GetList(a_val);
       *out_return = SdList_GetAt(error_list, 0);
