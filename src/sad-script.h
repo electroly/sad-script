@@ -49,7 +49,6 @@ extern "C" {
    An _r typedef means that a pointer is only being only; ownership is not transferred. */
 typedef struct SdResult_s SdResult;
 typedef struct SdSearchResult_s SdSearchResult;
-typedef union SdIntDoublePun_u SdIntDoublePun;
 typedef struct Sad_s Sad;
 typedef struct Sad_s* Sad_r;
 typedef struct SdString_s SdString;
@@ -62,8 +61,6 @@ typedef struct SdList_s SdList;
 typedef struct SdList_s* SdList_r;
 typedef struct SdEnv_s SdEnv;
 typedef struct SdEnv_s* SdEnv_r;
-typedef struct SdCallStack_s SdCallStack;
-typedef struct SdCallStack_s* SdCallStack_r;
 typedef struct SdValueSet_s SdValueSet;
 typedef struct SdValueSet_s* SdValueSet_r;
 typedef struct SdChain_s SdChain;

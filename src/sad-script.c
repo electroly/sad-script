@@ -147,6 +147,8 @@ struct SdEngine_s {
 
 static char* SdStrdup(const char* src);
 static int SdMin(int a, int b);
+static void* SdUnreferenced(void* x);
+static void SdExit(const char* message);
 
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
@@ -322,7 +324,7 @@ static void SdAssertNonEmptyString(SdString_r x) {
 #ifdef SD_DEBUG
 void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
    if (!ptr)
-      exit(-1);
+      SdExit("Allocation failure (SdDebugAllocCore)");
    memset(ptr, 0, size);
    /*printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
    (void)line;
@@ -412,24 +414,38 @@ static void SdDebugDumpChain(SdChain_r chain) {
 }
 #else /* SD_DEBUG */
 void* SdAlloc(size_t size) {
-   void* ptr = calloc(1, size);
-   if (!ptr)
-      exit(-1);
+   void* ptr = NULL;
+
+   if (size == 0)
+      size = 1;
+
+   ptr = calloc(1, size);
+   if (!ptr) {
+      char buf[1000];
+      sprintf(buf, "calloc(1, %u) failed (SdAlloc)", (unsigned int)size);
+      SdExit(buf);
+   }
    return ptr;
 }
 #define SdFree(ptr) free((ptr))
 #endif
 
 void* SdRealloc(void* ptr, size_t size) {
-   void* new_ptr = realloc(ptr, size);
+   void* new_ptr = NULL;
+
+   if (size == 0)
+      size = 1;
+
+   new_ptr = realloc(ptr, size);
    /* If there is not enough available memory to expand the block to the given size, the original block is left 
       unchanged, and NULL is returned. */
-   if (new_ptr)
-      return new_ptr;
-   else {
-      exit(-1);
-      return NULL; /* will not execute */
+   if (!new_ptr) {
+      char buf[1000];
+      sprintf(buf, "realloc(%x, %u) failed (SdAlloc)", (unsigned int)ptr, (unsigned int)size);
+      SdExit(buf);
    }
+
+   return new_ptr;
 }
 
 static char* SdStrdup(const char* src) {
@@ -452,6 +468,11 @@ static int SdMin(int a, int b) {
 
 static void* SdUnreferenced(void* x) {
    return x;
+}
+
+static void SdExit(const char* message) {
+   fprintf(stderr, "FATAL ERROR: %s\n", message);
+   exit(-1);
 }
 
 /* SdResult **********************************************************************************************************/

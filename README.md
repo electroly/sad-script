@@ -12,17 +12,17 @@ Control flow structures are JavaScript-like, with mandatory braces.  Function ca
 ```
 function fizz-buzz (x) {
    for i from 1 to 100 {
-      var multiple-of-3 (zero? [i % 3])
-      var multiple-of-5 (zero? [i % 5])
+      var multiple-of-3 = (zero? [i % 3])
+      var multiple-of-5 = (zero? [i % 5])
       
       if [multiple-of-3 and multiple-of-5] {
-         (print "FizzBuzz\n")
+         (println "FizzBuzz")
       } elseif multiple-of-3 {
-         (print "Fizz\n")
+         (println "Fizz")
       } elseif multiple-of-5 {
-         (print "Buzz\n")
+         (println "Buzz")
       } else {
-         (print (to-string i))
+         (println i)
       }
    }
 }
@@ -32,8 +32,8 @@ There is a convenient syntax for lambda functions (with closures), as well as a 
 
 ```
 function reversed-odd-numbers (low high) {
-	return query ((range low high) -> where :x [[x % 2] = 1] -> reverse)
+	return (pipe (range low high) (where \x [[x % 2] = 1]) reverse)
 }
 ```
 
-The interpreter is written in C89 and compiles cleanly under `gcc -ansi -pedantic -Wall -Wextra -Werror`, TinyCC (`tcc`), LCC-Win (`lc`), `clang`, and MSVC 2013.  It has been tested in Windows 7, OS X 10.9, and Debian Linux 7.7.  It should work on any other platform supporting ANSI C.  The interpreter can be embedded in client applications simply by including `sad-script.c` and `sad-script.h` file in the project.  No need to link a library or anything difficult.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.
+The interpreter is written in C89 and compiles cleanly under `gcc -ansi -pedantic -Wall -Wextra -Werror`, TinyCC (`tcc`), LCC-Win (`lc`), Borland C++ 5.5 (`bcc32`), `clang`, and MSVC 2013.  It has been tested in Windows 7, OS X 10.9, and Debian Linux 7.7.  It should work on any other platform supporting ANSI C.  The interpreter can be embedded in client applications simply by including `sad-script.c` and `sad-script.h` file in the project.  No need to link a library or anything difficult.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.
