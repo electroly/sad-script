@@ -426,11 +426,13 @@ void* SdRealloc(void* ptr, size_t size) {
       unchanged, and NULL is returned. */
    if (new_ptr)
       return new_ptr;
-   else
+   else {
       exit(-1);
+      return NULL; /* will not execute */
+   }
 }
 
-char* SdStrdup(const char* src) {
+static char* SdStrdup(const char* src) {
    size_t length = 0;
    char* dst = NULL;
 
@@ -441,11 +443,15 @@ char* SdStrdup(const char* src) {
    return dst;
 }
 
-int SdMin(int a, int b) {
+static int SdMin(int a, int b) {
    if (a < b)
       return a;
    else
       return b;
+}
+
+static void* SdUnreferenced(void* x) {
+   return x;
 }
 
 /* SdResult **********************************************************************************************************/
@@ -1101,7 +1107,7 @@ end:
 The objects are sorted by name.  If an exact match is found, then its index is returned.  Otherwise the next highest 
 match is returned.  The index may be one past the end of the list indicating that the search_name is higher than any 
 name in the list. */
-SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r search_name) {
+static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r search_name) {
    assert(list);
    assert(search_name);
    return SdList_Search(list, SdEnv_BinarySearchByName_CompareFunc, search_name);
@@ -1122,7 +1128,7 @@ static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context) {
 
 /* list is (list (list <unrelated> name1:str ...) (list <unrelated> name2:str ...) ...)
    The objects are sorted by name. Returns true if the item was inserted, false if the name already exists. */
-SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
+static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
    SdString_r item_name = NULL;
    
    assert(list);
@@ -1269,7 +1275,7 @@ void SdEnv_CollectGarbage(SdEnv_r self) {
    }
 }
 
-void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root) {
+static void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root) {
    SdChain* stack = NULL;
    
    assert(root);
@@ -1315,7 +1321,7 @@ SdResult SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue
 SdValue_r SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse) {
    SdValue_r value = NULL;
 
-   (void)self;
+   SdUnreferenced(self);
    assert(self);
    assert(frame);
    assert(name);
@@ -1333,7 +1339,7 @@ SdValue_r SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name,
    return NULL;
 }
 
-SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame) {
+static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame) {
    SdList_r slots = NULL;
    SdSearchResult search_result = { 0, SdFalse };
 
@@ -1476,7 +1482,7 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
       return SdAst_NodeValue(self, index); \
    }
 
-SdValue_r SdAst_NodeValue(SdValue_r node, size_t value_index) {
+static SdValue_r SdAst_NodeValue(SdValue_r node, size_t value_index) {
    assert(node);
    return SdList_GetAt(SdValue_GetList(node), value_index);
 }
@@ -1486,7 +1492,7 @@ SdNodeType SdAst_NodeType(SdValue_r node) {
    return SdValue_GetInt(SdAst_NodeValue(node, 0));
 }
 
-SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
+static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
    SdList* node = NULL;
    size_t i = 0;
 
@@ -1500,7 +1506,7 @@ SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
    return SdEnv_BoxList(env, node);
 }
 
-SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
+static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t num_values) {
    SdList* node = NULL;
    size_t i = 0;
 
@@ -1952,7 +1958,7 @@ void SdValueSet_Delete(SdValueSet* self) {
    SdFree(self);
 }
 
-int SdValueSet_CompareFunc(SdValue_r lhs, void* context) { /* compare the pointer values */
+static int SdValueSet_CompareFunc(SdValue_r lhs, void* context) { /* compare the pointer values */
    SdValue_r rhs = NULL;
 
    assert(lhs);
@@ -2309,7 +2315,7 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
    SdStringBuf_Delete(current_text);
 }
 
-void SdScanner_AppendToken(SdScanner_r self, int source_line, const char* token_text) {
+static void SdScanner_AppendToken(SdScanner_r self, int source_line, const char* token_text) {
    SdToken* token = NULL;
    SdScannerNode* new_node = NULL;
    
@@ -2331,7 +2337,7 @@ void SdScanner_AppendToken(SdScanner_r self, int source_line, const char* token_
    }
 }
 
-SdTokenType SdScanner_ClassifyToken(const char* text) {
+static SdTokenType SdScanner_ClassifyToken(const char* text) {
    assert(text);
    assert(strlen(text) > 0);
 
@@ -2431,7 +2437,7 @@ SdTokenType SdScanner_ClassifyToken(const char* text) {
    return SdTokenType_IDENTIFIER; /* anything goes */
 }
 
-SdBool SdScanner_IsIntLit(const char* text) {
+static SdBool SdScanner_IsIntLit(const char* text) {
    size_t i = 0, length = 0;
    int digits = 0;
 
@@ -2450,7 +2456,7 @@ SdBool SdScanner_IsIntLit(const char* text) {
    return digits > 0;
 }
 
-SdBool SdScanner_IsDoubleLit(const char* text) {
+static SdBool SdScanner_IsDoubleLit(const char* text) {
    size_t i = 0, length = 0;
    SdBool dot = SdFalse;
    int digits = 0;
@@ -2556,7 +2562,7 @@ SdBool SdScanner_Read(SdScanner_r self, SdToken_r* out_token) { /* true = token 
 #define SdParser_READ_BODY(body) \
    SdParser_CALL(SdParser_ParseBody(env, scanner, &body))
 
-SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) {
+static SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) {
    SdStringBuf* buf = NULL;
    SdResult result = SdResult_SUCCESS;
    
@@ -2575,11 +2581,11 @@ SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) {
    return result;
 }
 
-SdResult SdParser_FailEof(void) {
+static SdResult SdParser_FailEof(void) {
    return SdFail(SdErr_UNEXPECTED_EOF, "Unexpected EOF.");
 }
 
-SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, SdTokenType actual_type) {
+static SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, SdTokenType actual_type) {
    SdStringBuf* buf = NULL;
    SdResult result = SdResult_SUCCESS;
 
@@ -2594,7 +2600,7 @@ SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, SdTokenTy
    return result;
 }
 
-const char* SdParser_TypeString(SdTokenType type) {
+static const char* SdParser_TypeString(SdTokenType type) {
    switch (type) {
       case SdTokenType_NONE: return "(none)";
       case SdTokenType_INT_LIT: return "<integer literal>";
@@ -2680,7 +2686,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type, SdToken_r* out_token) {
+static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type, SdToken_r* out_token) {
    SdToken_r token = NULL;
    SdTokenType actual_type = SdTokenType_NONE;
 
@@ -2698,7 +2704,7 @@ SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type,
    }
 }
 
-SdResult SdParser_ReadExpectEquals(SdScanner_r scanner) {
+static SdResult SdParser_ReadExpectEquals(SdScanner_r scanner) {
    SdToken_r token = NULL;
 
    assert(scanner);
@@ -2711,7 +2717,7 @@ SdResult SdParser_ReadExpectEquals(SdScanner_r scanner) {
       return SdResult_SUCCESS;
 }
 
-SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdBool is_imported = SdFalse;
@@ -2774,7 +2780,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdList* statements = NULL;
@@ -2800,7 +2806,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
 
@@ -2882,7 +2888,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdList* param_names = NULL;
@@ -2927,7 +2933,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    assert(env);
    assert(scanner);
    assert(out_node);
@@ -2952,7 +2958,7 @@ SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* ou
    }
 }
 
-SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdString* function_name = NULL;
@@ -3007,7 +3013,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdString* identifier = NULL;
@@ -3049,7 +3055,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdString* identifier = NULL;
@@ -3091,7 +3097,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r condition_expr = NULL, true_body = NULL, else_body = NULL;
@@ -3126,7 +3132,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseElseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseElseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, body = NULL;
@@ -3143,7 +3149,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdString* iter_name = NULL;
@@ -3193,7 +3199,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseWhile(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseWhile(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r body = NULL, expr = NULL;
@@ -3210,7 +3216,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseDo(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseDo(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r body = NULL, expr = NULL;
@@ -3228,7 +3234,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r condition_expr = NULL, default_body = NULL;
@@ -3265,7 +3271,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, body = NULL;
@@ -3282,7 +3288,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL;
@@ -3297,7 +3303,7 @@ end:
    return result;
 }
 
-SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL;
@@ -3314,7 +3320,7 @@ end:
 
 /* SdEngine **********************************************************************************************************/
 #define SdEngine_INTRINSIC_START_ARGS1(name) \
-   SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
+   static SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL; \
       SdType a_type = SdType_NIL; \
@@ -3325,7 +3331,7 @@ end:
       if (SdFailed(result = SdEngine_Args1(arguments, &a_val, &a_type))) \
          return result;
 #define SdEngine_INTRINSIC_START_ARGS2(name) \
-   SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
+   static SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL, b_val = NULL; \
       SdType a_type = SdType_NIL, b_type = SdType_NIL; \
@@ -3336,7 +3342,7 @@ end:
       if (SdFailed(result = SdEngine_Args2(arguments, &a_val, &a_type, &b_val, &b_type))) \
          return result;
 #define SdEngine_INTRINSIC_START_ARGS3(name) \
-   SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
+   static SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL, b_val = NULL, c_val = NULL; \
       SdType a_type = SdType_NIL, b_type = SdType_NIL, c_type = SdType_NIL; \
@@ -3602,7 +3608,7 @@ end:
    return result;
 }
 
-SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value) {
+static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value) {
    SdResult result = SdResult_SUCCESS;
 
    assert(self);
@@ -3652,7 +3658,7 @@ SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr,
    return result;
 }
 
-SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value) {
+static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value) {
    SdString_r identifier = NULL;
    SdValue_r slot = NULL;
 
@@ -3671,7 +3677,7 @@ SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var
    return SdResult_SUCCESS;
 }
 
-SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value) {
+static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value) {
    assert(self);
    assert(frame);
    assert(function);
@@ -3684,7 +3690,7 @@ SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r f
    return SdResult_SUCCESS;
 }
 
-SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdList_r statements = NULL;
    SdValue_r statement = NULL;
@@ -3711,7 +3717,7 @@ SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, 
    return result;
 }
 
-SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdValue_r discarded_result = NULL;
    SdBool gc_needed = SdFalse;
 
@@ -3752,7 +3758,7 @@ SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r s
    }
 }
 
-SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdList_r argument_exprs = NULL;
    SdList* argument_values = NULL;
@@ -3783,7 +3789,7 @@ end:
    return result;
 }
 
-SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+static SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r name = NULL, expr = NULL, value = NULL;
 
@@ -3801,7 +3807,7 @@ SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r stateme
    return SdEnv_DeclareVar(self->env, frame, name, value);
 }
 
-SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+static SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdList_r names = NULL, list = NULL;
    SdValue_r expr = NULL, list_value = NULL, element_value = NULL, name = NULL;
@@ -3834,7 +3840,7 @@ SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdValue_r st
    return result;
 }
 
-SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdString_r name = NULL;
    SdValue_r slot = NULL, expr = NULL, value = NULL;
@@ -3861,7 +3867,7 @@ SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r stateme
    return result;
 }
 
-SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdList_r names = NULL, list = NULL;
    SdValue_r expr = NULL, list_value = NULL, element_value = NULL, slot = NULL, name = NULL;
@@ -3898,7 +3904,7 @@ SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdValue_r st
    return result;
 }
 
-SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r elseif = NULL, expr = NULL, value = NULL;
    SdList_r elseifs = NULL;
@@ -3938,7 +3944,7 @@ SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r statemen
    return SdEngine_ExecuteBody(self, frame, SdAst_If_ElseBody(statement), out_return);
 }
 
-SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r iter_name = NULL, start_expr = NULL, start_value = NULL, stop_expr = NULL, stop_value = NULL, 
       body = NULL, loop_frame = NULL;
@@ -3989,7 +3995,7 @@ end:
    return result;
 }
 
-SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r iter_name = NULL, index_name = NULL, haystack_expr = NULL, haystack_value = NULL, body = NULL, 
       iter_value = NULL, loop_frame = NULL;
@@ -4040,7 +4046,7 @@ end:
    return result;
 }
 
-SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL, body = NULL, loop_frame = NULL;
 
@@ -4077,7 +4083,7 @@ end:
    return result;
 }
 
-SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL, body = NULL, loop_frame = NULL;
 
@@ -4116,7 +4122,7 @@ end:
    return result;
 }
 
-SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL, cas = NULL, case_expr = NULL, case_value = NULL, case_body = NULL, 
       case_frame = NULL, default_body = NULL;
@@ -4159,7 +4165,7 @@ SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue_r stat
    return result;
 }
 
-SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
+static SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    assert(self);
    assert(frame);
    assert(statement);
@@ -4170,7 +4176,7 @@ SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r frame, SdValue_r stat
    return SdEngine_EvaluateExpr(self, frame, SdAst_Return_Expr(statement), out_return);
 }
 
-SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
+static SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL;
 
@@ -4189,7 +4195,7 @@ SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r frame, SdValue_r stateme
    return SdFail(SdErr_DIED, SdString_CStr(SdValue_GetString(value)));
 }
 
-SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r arguments, SdValue_r* out_return) {
+static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r arguments, SdValue_r* out_return) {
    const char* cstr = NULL;
    
    assert(self);
@@ -4316,7 +4322,7 @@ SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r argum
    return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Not an intrinsic function: ", name);
 }
 
-SdResult SdEngine_Args1(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type) {
+static SdResult SdEngine_Args1(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type) {
    assert(arguments);
    assert(out_a);
    assert(out_a_type);
@@ -4328,7 +4334,7 @@ SdResult SdEngine_Args1(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type
    return SdResult_SUCCESS;
 }
 
-SdResult SdEngine_Args2(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type, SdValue_r* out_b, 
+static SdResult SdEngine_Args2(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type, SdValue_r* out_b, 
    SdType* out_b_type) {
    assert(arguments);
    assert(out_a);
@@ -4345,7 +4351,7 @@ SdResult SdEngine_Args2(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type
    return SdResult_SUCCESS;
 }
 
-SdResult SdEngine_Args3(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type, SdValue_r* out_b, 
+static SdResult SdEngine_Args3(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type, SdValue_r* out_b, 
    SdType* out_b_type, SdValue_r* out_c, SdType* out_c_type) {
    assert(arguments);
    assert(out_a);
@@ -4493,7 +4499,7 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ListLength)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListGetAt)
-   (void)self;
+   SdUnreferenced(self);
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
@@ -4504,7 +4510,7 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListGetAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListSetAt)
-   (void)self;
+   SdUnreferenced(self);
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
@@ -4516,7 +4522,7 @@ SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListSetAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListInsertAt)
-   (void)self;
+   SdUnreferenced(self);
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = NULL;
       int b_int = 0;
@@ -4531,7 +4537,7 @@ SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListInsertAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListRemoveAt)
-   (void)self;
+   SdUnreferenced(self);
    if (a_type == SdType_LIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
@@ -4564,7 +4570,7 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringGetAt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Print)
-   (void)self;
+   SdUnreferenced(self);
    if (a_type == SdType_STRING) {
       printf("%s", SdString_CStr(SdValue_GetString(a_val)));
       *out_return = a_val;
@@ -4580,7 +4586,7 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Error)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ErrorMessage)
-   (void)self;
+   SdUnreferenced(self);
    if (a_type == SdType_ERROR) {
       SdList_r error_list = SdValue_GetList(a_val);
       *out_return = SdList_GetAt(error_list, 0);

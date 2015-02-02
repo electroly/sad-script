@@ -40,7 +40,7 @@
 
 #include "sad-script.h"
 
-int main(int argc, const char* argv[]) {
+int main(int argc, char* argv[]) {
    int ret = 0;
    SdResult result = SdResult_SUCCESS;
    Sad* sad = NULL;

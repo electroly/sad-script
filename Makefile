@@ -1,8 +1,9 @@
-# CC may be overridden on the command line.  Try 'gcc' or 'tcc'.  On Windows try 'msvc' to use the VS 2013 compiler.
+# CC may be overridden on the command line.  Try 'gcc', 'tcc', and 'lc'.  On Windows try 'msvc' to use the VS 2013 compiler.
 CC=gcc
 CC2=$(CC)
 CFLAGS=
 LFLAGS=
+SEP=/
 
 ifeq ($(CC),gcc)
 	CFLAGS=-ansi -pedantic -Wall -Wextra -Werror -O2 -x c
@@ -15,8 +16,12 @@ ifeq ($(CC),msvc)
 	LFLAGS=
 endif
 
-SAD_SOURCES=src/sad.c src/sad-script.c
+ifeq ($(CC),lc)
+	CFLAGS=-A -shadows -unused
+	SEP=\\
+endif
 
+SAD_SOURCES=src/sad.c src/sad-script.c
 SAD_TEST_SOURCES=src/sad-test.c
 
 TESTS=$(wildcard tests/*.sad)
@@ -25,10 +30,12 @@ TESTRESULTS=$(TESTS:tests/%.sad=testresults/%.testresult)
 all: bin/sad bin/sad-test
 
 bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
-	$(CC2) $(CFLAGS) $(LFLAGS) $(SAD_SOURCES) -o $@
+	$(CC2) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_SOURCES)) -o $@
+	@rm -f *.obj
 
 bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
-	$(CC2) $(CFLAGS) $(LFLAGS) $(SAD_TEST_SOURCES) -o $@
+	$(CC2) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) -o $@
+	@rm -f *.obj
 
 bin/prelude.sad: src/prelude.sad
 	cp src/prelude.sad bin/prelude.sad
@@ -53,3 +60,6 @@ $(TESTRESULTS):
 	@cat $@.err >> $@
 	@rm $@.err
 	@bin/sad-test $(@:testresults/%.testresult=tests/%.sad) $@
+
+
+#OBJ_FILES_CORRECT=$(subst \,/,$(SAD_SOURCES))

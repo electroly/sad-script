@@ -112,7 +112,7 @@ static char* ReadExpectedFile(const char* file_path) {
    return str;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, char* argv[]) {
    int ret = 0;
    const char* expected_file_path;
    char* expected = NULL;
