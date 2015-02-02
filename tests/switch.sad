@@ -1,0 +1,46 @@
+//yes
+//yes
+//yes
+//no
+//yes
+
+switch 1 true {
+   case Int String: {
+      (println "no")
+   }
+   case Int Bool: {
+      (println "yes")
+   }
+}
+
+switch 1 true {
+   case Int false: {
+      (println "no")
+   }
+   case Int true: {
+      (println "yes")
+   }
+}
+
+switch 1 true {
+   case 0 true: {
+      (println "no")
+   }
+   case 1 true: {
+      (println "yes")
+   }
+}
+
+function blah (x y) {
+   switch {
+      case 1 0: {
+         (println "no")
+      }
+      case 0 1: {
+         (println "yes")
+      }
+   }
+}
+
+(blah 1 0)
+(blah 0 1)

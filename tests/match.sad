@@ -1,0 +1,25 @@
+//yes
+//yes
+//yes
+//(nil)
+
+(println match 1 true { 
+   case Int Bool: "yes"
+   case 1 true: "no"
+})
+
+(println match 1 true { 
+   case 1 false: "no"
+   case 1 true: "yes"
+})
+
+(println match 1 true { 
+   case 1 String: "no"
+   case 1 Bool: "yes"
+})
+
+(println match 2 true { 
+   case 1 String: "no"
+   case 1 Bool: "yes"
+})
+

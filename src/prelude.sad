@@ -1,4 +1,4 @@
-// SAD-Script
+// SAD-Script Prelude
 // Copyright (c) 2015, Brian Luft.
 // All rights reserved.
 //
@@ -17,6 +17,8 @@
 // SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Intrinsics /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 import function type-of (x)
 import function hash (x)
@@ -103,6 +105,7 @@ var List = (get-type 5)
 var Function = (get-type 6)
 var Error = (get-type 7)
 var Type = (get-type 8)
+var Any = (get-type 9)
 
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -116,6 +119,10 @@ function false? (self) = [self = false]
 function printv (x) = (print (to-string x))
 function != (a b) = (not [a = b])
 
+function die! (x) { // allow die to be used in an expression
+   die x
+}
+
 function println (x) {
    (printv x)
    (print "\n")
@@ -128,36 +135,18 @@ function list.append! (self value) {
 
 function += (collection item) = [collection list.append! item]
 
-function @ (self index) {
-   switch (type-of self) {
-      case String {
-         return [self string.get-at index]
-      }
-      case List {
-         return [self list.get-at index]
-      }
-      default {
-         die "Expected string or list."
-      }
-   }
+function @ (self index) = match {
+   case String Int: [self string.get-at index]
+   case List Int: [self list.get-at index]
+   default: (die! "Expected (String Int) or (List Int).")
 }
 
-function @= (self index value) {
-   [collection list.set-at! index value]
-}
+function @= (self index value) = [collection list.set-at! index value]
 
-function length (self) {
-   switch (type-of self) {
-      case String {
-         return [self string.length]
-      }
-      case List {
-         return [self list.length]
-      }
-      default {
-         die "Expected string or list."
-      }
-   }
+function length (self) = match {
+   case String: [self string.length]
+   case List: [self list.length]
+   default: (die! "Expected String or List.")
 }
 
 // Queries ////////////////////////////////////////////////////////////////////////////////////////////////////////////

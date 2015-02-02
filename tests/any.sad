@@ -1,0 +1,42 @@
+//-
+//true
+//true
+//true
+//true
+//true
+//true
+//true
+//true
+//true
+//-
+//true
+//true
+//true
+//true
+//true
+//true
+//true
+//true
+//true
+
+(println "-")
+(println [nil = Any])
+(println [5 = Any])
+(println [5.5 = Any])
+(println [true = Any])
+(println ["hello" = Any])
+(println [(list) = Any])
+(println [\x x = Any])
+(println [Any = Any])
+(println [Int = Any])
+
+(println "-")
+(println [Any = nil])
+(println [Any = 5])
+(println [Any = 5.5])
+(println [Any = true])
+(println [Any = "hello"])
+(println [Any = (list)])
+(println [Any = \x x])
+(println [Any = Any])
+(println [Any = Int])

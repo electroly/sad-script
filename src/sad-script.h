@@ -106,7 +106,10 @@ typedef enum SdType_e {
    SdType_ERROR = 7,
 
    /* this is really just an integer, but with a unique type to distinguish it from general purpose numbers */
-   SdType_TYPE = 8
+   SdType_TYPE = 8,
+
+   /* can't create a value of this type, it exists only so we can deal with the type itself in pattern matching */
+   SdType_ANY = 9
 } SdType;
 
 typedef enum SdTokenType_e {
@@ -143,7 +146,8 @@ typedef enum SdTokenType_e {
    SdTokenType_DIE,
    SdTokenType_IMPORT,
    SdTokenType_NIL,
-   SdTokenType_LAMBDA
+   SdTokenType_LAMBDA,
+   SdTokenType_MATCH
 } SdTokenType;
 
 typedef enum SdNodeType_e {
@@ -168,6 +172,7 @@ typedef enum SdNodeType_e {
    SdNodeType_STRING_LIT,
    SdNodeType_NIL_LIT,
    SdNodeType_VAR_REF,
+   SdNodeType_MATCH,
 
    /* Statement or expression (depending on the context) */
    SdNodeType_CALL,
@@ -178,15 +183,18 @@ typedef enum SdNodeType_e {
    SdNodeType_MULTI_VAR,
    SdNodeType_MULTI_SET,
    SdNodeType_IF,
-   SdNodeType_ELSEIF,
    SdNodeType_FOR,
    SdNodeType_FOREACH,
    SdNodeType_WHILE,
    SdNodeType_DO,
    SdNodeType_SWITCH,
-   SdNodeType_CASE,
    SdNodeType_RETURN,
    SdNodeType_DIE,
+
+   /* Sub-components */
+   SdNodeType_ELSEIF,
+   SdNodeType_SWITCH_CASE,
+   SdNodeType_MATCH_CASE,
 
    SdNodeType_BLOCKS_FIRST = SdNodeType_PROGRAM,
    SdNodeType_BLOCKS_LAST = SdNodeType_FUNCTION,
@@ -370,13 +378,13 @@ SdValue_r      SdEnv_CallTrace_Arguments(SdValue_r self);
       (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr | Body)         | 
       (list WHILE      | condition:Expr          | Body)               |               |               | 
       (list DO         | condition:Expr          | Body)               |               |               | 
-      (list SWITCH     | Expr                    | Lst<Case>           | default:Body) |               | 
+      (list SWITCH     | Lst<Expr>               | Lst<SwitchCase>     | default:Body) |               | 
       (list RETURN     | Expr)                   |                     |               |               | 
       (list DIE        | Expr)                   |                     |               |               | 
    ElseIf: ------------+-------------------------+---------------------+---------------+---------------|---------------
       (list ELSEIF     | condition:Expr          | Body)               |               |               | 
-   Case: --------------+-------------------------+---------------------+---------------+---------------|---------------
-      (list CASE       | Expr                    | Body)               |               |               | 
+   SwitchCase: --------+-------------------------+---------------------+---------------+---------------|---------------
+      (list SWITCH_CASE| Lst<Expr>               | Body)               |               |               | 
    Expr: --------------+-------------------------+---------------------+---------------+---------------|---------------
       (list INT_LIT    | Int)                    |                     |               |               | 
       (list DOUBLE_LIT | Double)                 |                     |               |               | 
@@ -384,8 +392,11 @@ SdValue_r      SdEnv_CallTrace_Arguments(SdValue_r self);
       (list STRING_LIT | Str)                    |                     |               |               | 
       (list NIL_LIT)   |                         |                     |               |               | 
       (list VAR_REF    | identifier:Str)         |                     |               |               | 
+      (list MATCH      | Lst<Expr>               | Lst<MatchCase>      | default:Expr) |               | 
       (list CALL ^     | ...                     |                     |               |               | 
       (list FUNCTION ^ | ...                     |                     |               |               | 
+   MatchCase: ---------+-------------------------+---------------------+---------------+---------------|---------------
+      (list MATCH_CASE | Lst<Expr>               | Expr)               |               |               | 
    Body: --------------+-------------------------+---------------------+---------------+---------------|---------------
       (list BODY       | Lst<Statement>)         |                     |               |               | 
 */
@@ -459,14 +470,14 @@ SdValue_r      SdAst_Do_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r bod
 SdValue_r      SdAst_Do_ConditionExpr(SdValue_r self);
 SdValue_r      SdAst_Do_Body(SdValue_r self);
 
-SdValue_r      SdAst_Switch_New(SdEnv_r env, SdValue_r expr, SdList* cases, SdValue_r default_body);
-SdValue_r      SdAst_Switch_Expr(SdValue_r self);
+SdValue_r      SdAst_Switch_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_body);
+SdList_r       SdAst_Switch_Exprs(SdValue_r self);
 SdList_r       SdAst_Switch_Cases(SdValue_r self);
 SdValue_r      SdAst_Switch_DefaultBody(SdValue_r self);
 
-SdValue_r      SdAst_Case_New(SdEnv_r env, SdValue_r expr, SdValue_r body);
-SdValue_r      SdAst_Case_Expr(SdValue_r self);
-SdValue_r      SdAst_Case_Body(SdValue_r self);
+SdValue_r      SdAst_SwitchCase_New(SdEnv_r env, SdList* exprs, SdValue_r body);
+SdList_r       SdAst_SwitchCase_IfExprs(SdValue_r self);
+SdValue_r      SdAst_SwitchCase_ThenBody(SdValue_r self);
 
 SdValue_r      SdAst_Return_New(SdEnv_r env, SdValue_r expr);
 SdValue_r      SdAst_Return_Expr(SdValue_r self);
@@ -490,6 +501,15 @@ SdValue_r      SdAst_NilLit_New(SdEnv_r env);
 
 SdValue_r      SdAst_VarRef_New(SdEnv_r env, SdString* identifier);
 SdString_r     SdAst_VarRef_Identifier(SdValue_r self);
+
+SdValue_r      SdAst_Match_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_expr);
+SdList_r       SdAst_Match_Exprs(SdValue_r self);
+SdList_r       SdAst_Match_Cases(SdValue_r self);
+SdValue_r      SdAst_Match_DefaultExpr(SdValue_r self);
+
+SdValue_r      SdAst_MatchCase_New(SdEnv_r env, SdList* if_exprs, SdValue_r then_expr);
+SdList_r       SdAst_MatchCase_IfExprs(SdValue_r self);
+SdValue_r      SdAst_MatchCase_ThenExpr(SdValue_r self);
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet*    SdValueSet_New(void);

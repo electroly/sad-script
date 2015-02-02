@@ -33,10 +33,9 @@
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
-#else
-#include <assert.h>
 #endif
 
+#include <assert.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -164,7 +163,7 @@ static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t n
 static int SdValueSet_CompareFunc(SdValue_r lhs, void* context);
 
 static void SdScanner_AppendToken(SdScanner_r self, int source_line, const char* token_text);
-static SdTokenType SdScanner_ClassifyToken(const char* token_text);
+static SdTokenType SdScanner_ClassifyToken(const char* text);
 static SdBool SdScanner_IsDoubleLit(const char* text);
 static SdBool SdScanner_IsIntLit(const char* text);
 
@@ -187,13 +186,16 @@ static SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
 static SdResult SdParser_ParseWhile(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseDo(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
-static SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseSwitchCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseMatch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseMatchCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 
 static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value);
 static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value);
 static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value);
+static SdResult SdEngine_EvaluateMatch(SdEngine_r self, SdValue_r frame, SdValue_r match, SdValue_r* out_value);
 static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
 static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return);
@@ -328,8 +330,11 @@ static void SdAssertNonEmptyString(SdString_r x) {
 
 #ifdef SD_DEBUG
 void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
-   if (!ptr)
+   if (((unsigned int)ptr & 0xFFFF) == 0x3410) __debugbreak();
+   if (!ptr) {
       SdExit("Allocation failure (SdDebugAllocCore)");
+      return NULL;
+   }
    memset(ptr, 0, size);
    /*printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
    (void)line;
@@ -482,6 +487,7 @@ static void SdExit(const char* message) {
 
 static const char* SdType_Name(SdType x) {
    switch (x) {
+      case SdType_ANY: return "Any";
       case SdType_NIL: return "Nil";
       case SdType_INT: return "Int";
       case SdType_DOUBLE: return "Double";
@@ -793,6 +799,8 @@ void SdValue_Delete(SdValue* self) {
          SdString_Delete(SdValue_GetString(self));
          break;
       case SdType_LIST:
+      case SdType_FUNCTION:
+      case SdType_ERROR:
          SdList_Delete(SdValue_GetList(self));
          break;
       default:
@@ -847,6 +855,11 @@ SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
    a_type = SdValue_Type(a);
    b_type = SdValue_Type(b);
 
+   /* If one of the values is the type Any, then it's always equal. */
+   if ((a_type == SdType_TYPE && SdValue_GetInt(a) == SdType_ANY) || 
+       (b_type == SdType_TYPE && SdValue_GetInt(b) == SdType_ANY))
+      return SdTrue;
+
    /* If one of the values is a Type, then this acts like the "is" operator. */
    if (a_type == SdType_TYPE && b_type != SdType_TYPE)
       return (SdType)SdValue_GetInt(a) == b_type;
@@ -875,6 +888,7 @@ int SdValue_Hash(SdValue_r self) {
 
    SdAssert(self);
    switch (SdValue_Type(self)) {
+      case SdType_ANY:
       case SdType_NIL:
          hash = 0;
          break;
@@ -1596,6 +1610,8 @@ static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_value
 
    SdAssert(env);
    SdAssert(values);
+   SdAssert(SdValue_Type(values[0]) == SdType_INT);
+
    node = SdList_New();
    for (i = 0; i < num_values; i++) {
       SdAssert(values[i]);
@@ -1615,6 +1631,7 @@ static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t n
       SdAssert(values[i]);
       SdList_Append(node, values[i]);
    }
+
    return SdEnv_BoxFunction(env, node);
 }
 
@@ -1845,36 +1862,36 @@ SdValue_r SdAst_Do_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body) {
 SdAst_VALUE_GETTER(SdAst_Do_ConditionExpr, SdNodeType_DO, 1)
 SdAst_VALUE_GETTER(SdAst_Do_Body, SdNodeType_DO, 2)
 
-SdValue_r SdAst_Switch_New(SdEnv_r env, SdValue_r expr, SdList* cases, SdValue_r default_body) {
+SdValue_r SdAst_Switch_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_body) {
    SdAst_BEGIN(SdNodeType_SWITCH)
    
    SdAssert(env);
-   SdAssertExpr(expr);
-   SdAssertAllNodesOfType(cases, SdNodeType_CASE);
+   SdAssertAllNodesOfTypes(exprs, SdNodeType_EXPRESSIONS_FIRST, SdNodeType_EXPRESSIONS_LAST);
+   SdAssertAllNodesOfType(cases, SdNodeType_SWITCH_CASE);
    SdAssertNode(default_body, SdNodeType_BODY);
    
-   SdAst_VALUE(expr)
+   SdAst_LIST(exprs)
    SdAst_LIST(cases)
    SdAst_VALUE(default_body)
    SdAst_END
 }
-SdAst_VALUE_GETTER(SdAst_Switch_Expr, SdNodeType_SWITCH, 1)
+SdAst_LIST_GETTER(SdAst_Switch_Exprs, SdNodeType_SWITCH, 1)
 SdAst_LIST_GETTER(SdAst_Switch_Cases, SdNodeType_SWITCH, 2)
 SdAst_VALUE_GETTER(SdAst_Switch_DefaultBody, SdNodeType_SWITCH, 3)
 
-SdValue_r SdAst_Case_New(SdEnv_r env, SdValue_r expr, SdValue_r body) {
-   SdAst_BEGIN(SdNodeType_CASE)
+SdValue_r SdAst_SwitchCase_New(SdEnv_r env, SdList* exprs, SdValue_r body) {
+   SdAst_BEGIN(SdNodeType_SWITCH_CASE)
 
    SdAssert(env);
-   SdAssertExpr(expr);
+   SdAssertAllNodesOfTypes(exprs, SdNodeType_EXPRESSIONS_FIRST, SdNodeType_EXPRESSIONS_LAST);
    SdAssertNode(body, SdNodeType_BODY);
 
-   SdAst_VALUE(expr)
+   SdAst_LIST(exprs)
    SdAst_VALUE(body)
    SdAst_END
 }
-SdAst_VALUE_GETTER(SdAst_Case_Expr, SdNodeType_CASE, 1)
-SdAst_VALUE_GETTER(SdAst_Case_Body, SdNodeType_CASE, 2)
+SdAst_LIST_GETTER(SdAst_SwitchCase_IfExprs, SdNodeType_SWITCH_CASE, 1)
+SdAst_VALUE_GETTER(SdAst_SwitchCase_ThenBody, SdNodeType_SWITCH_CASE, 2)
 
 SdValue_r SdAst_Return_New(SdEnv_r env, SdValue_r expr) {
    SdAst_BEGIN(SdNodeType_RETURN)
@@ -1957,6 +1974,37 @@ SdValue_r SdAst_VarRef_New(SdEnv_r env, SdString* identifier) {
    SdAst_END
 }
 SdAst_STRING_GETTER(SdAst_VarRef_Identifier, SdNodeType_VAR_REF, 1)
+
+SdValue_r SdAst_Match_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_expr) {
+   SdAst_BEGIN(SdNodeType_MATCH)
+   
+   SdAssert(env);
+   SdAssertAllNodesOfTypes(exprs, SdNodeType_EXPRESSIONS_FIRST, SdNodeType_EXPRESSIONS_LAST);
+   SdAssertAllNodesOfType(cases, SdNodeType_MATCH_CASE);
+   SdAssertExpr(default_expr);
+   
+   SdAst_LIST(exprs)
+   SdAst_LIST(cases)
+   SdAst_VALUE(default_expr)
+   SdAst_END
+}
+SdAst_LIST_GETTER(SdAst_Match_Exprs, SdNodeType_MATCH, 1)
+SdAst_LIST_GETTER(SdAst_Match_Cases, SdNodeType_MATCH, 2)
+SdAst_VALUE_GETTER(SdAst_Match_DefaultExpr, SdNodeType_MATCH, 3)
+
+SdValue_r SdAst_MatchCase_New(SdEnv_r env, SdList* if_exprs, SdValue_r then_expr) {
+   SdAst_BEGIN(SdNodeType_MATCH_CASE)
+
+   SdAssert(env);
+   SdAssertAllNodesOfTypes(if_exprs, SdNodeType_EXPRESSIONS_FIRST, SdNodeType_EXPRESSIONS_LAST);
+   SdAssertExpr(then_expr);
+
+   SdAst_LIST(if_exprs)
+   SdAst_VALUE(then_expr)
+   SdAst_END
+}
+SdAst_LIST_GETTER(SdAst_MatchCase_IfExprs, SdNodeType_MATCH_CASE, 1)
+SdAst_VALUE_GETTER(SdAst_MatchCase_ThenExpr, SdNodeType_MATCH_CASE, 2)
 
 /* These are SdEnv nodes "above" the AST, but it's convenient to use the same macros to implement them. */
 SdAst_LIST_GETTER(SdEnv_Root_Functions, SdNodeType_ROOT, 1)
@@ -2503,6 +2551,10 @@ static SdTokenType SdScanner_ClassifyToken(const char* text) {
          if (strcmp(text, "in") == 0) return SdTokenType_IN;
          break;
 
+      case 'm':
+         if (strcmp(text, "match") == 0) return SdTokenType_MATCH;
+         break;
+
       case 'n':
          if (strcmp(text, "nil") == 0) return SdTokenType_NIL;
          break;
@@ -2991,6 +3043,10 @@ static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
          result = SdParser_ParseClosure(env, scanner, out_node);
          break;
 
+      case SdTokenType_MATCH:
+         result = SdParser_ParseMatch(env, scanner, out_node);
+         break;
+
       default:
          result = SdParser_Fail(SdErr_UNEXPECTED_TOKEN, SdScanner_PeekToken(scanner), "Expected expression.");
          break;
@@ -3349,26 +3405,35 @@ end:
 static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
-   SdValue_r condition_expr = NULL, default_body = NULL;
+   SdValue_r default_body = NULL;
+   SdList* condition_exprs = NULL;
    SdList* cases = NULL;
 
    SdAssert(env);
    SdAssert(scanner);
    SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_SWITCH);
-   SdParser_READ_EXPR(condition_expr);
+
+   condition_exprs = SdList_New();
+   while (SdScanner_PeekType(scanner) != SdTokenType_OPEN_BRACE) {
+      SdValue_r condition_expr = NULL;
+      SdParser_READ_EXPR(condition_expr);
+      SdList_Append(condition_exprs, condition_expr);
+   }
+   
    SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACE);
 
    cases = SdList_New();
    while (SdScanner_PeekType(scanner) == SdTokenType_CASE) {
       SdValue_r case_v = NULL;
-      SdParser_CALL(SdParser_ParseCase(env, scanner, &case_v));
+      SdParser_CALL(SdParser_ParseSwitchCase(env, scanner, &case_v));
       SdAssert(case_v);
       SdList_Append(cases, case_v);
    }
 
    if (SdScanner_PeekType(scanner) == SdTokenType_DEFAULT) {
       SdParser_READ_EXPECT_TYPE(SdTokenType_DEFAULT);
+      SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
       SdParser_READ_BODY(default_body);
    } else {
       default_body = SdAst_Body_New(env, SdList_New());
@@ -3376,27 +3441,116 @@ static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r
 
    SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_BRACE);
 
-   *out_node = SdAst_Switch_New(env, condition_expr, cases, default_body);
+   *out_node = SdAst_Switch_New(env, condition_exprs, cases, default_body);
+   condition_exprs = NULL;
    cases = NULL;
 end:
+   if (condition_exprs) SdList_Delete(condition_exprs);
    if (cases) SdList_Delete(cases);
    return result;
 }
 
-static SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+static SdResult SdParser_ParseSwitchCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
-   SdValue_r expr = NULL, body = NULL;
+   SdValue_r body = NULL;
+   SdList* exprs = NULL;
 
    SdAssert(env);
    SdAssert(scanner);
    SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_CASE);
-   SdParser_READ_EXPR(expr);
+
+   exprs = SdList_New();
+   while (SdScanner_PeekType(scanner) != SdTokenType_COLON) {
+      SdValue_r expr = NULL;
+      SdParser_READ_EXPR(expr);
+      SdList_Append(exprs, expr);
+   }
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
    SdParser_READ_BODY(body);
 
-   *out_node = SdAst_Case_New(env, expr, body);
+   *out_node = SdAst_SwitchCase_New(env, exprs, body);
+   exprs = NULL;
 end:
+   if (exprs) SdList_Delete(exprs);
+   return result;
+}
+
+static SdResult SdParser_ParseMatch(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r default_expr = NULL;
+   SdList* condition_exprs = NULL;
+   SdList* cases = NULL;
+
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_MATCH);
+
+   condition_exprs = SdList_New();
+   while (SdScanner_PeekType(scanner) != SdTokenType_OPEN_BRACE) {
+      SdValue_r condition_expr = NULL;
+      SdParser_READ_EXPR(condition_expr);
+      SdList_Append(condition_exprs, condition_expr);
+   }
+   
+   SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACE);
+
+   cases = SdList_New();
+   while (SdScanner_PeekType(scanner) == SdTokenType_CASE) {
+      SdValue_r case_v = NULL;
+      SdParser_CALL(SdParser_ParseMatchCase(env, scanner, &case_v));
+      SdAssert(case_v);
+      SdList_Append(cases, case_v);
+   }
+
+   if (SdScanner_PeekType(scanner) == SdTokenType_DEFAULT) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_DEFAULT);
+      SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
+      SdParser_READ_EXPR(default_expr);
+   } else {
+      default_expr = SdAst_NilLit_New(env);
+   }
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_BRACE);
+
+   *out_node = SdAst_Match_New(env, condition_exprs, cases, default_expr);
+   condition_exprs = NULL;
+   cases = NULL;
+end:
+   if (condition_exprs) SdList_Delete(condition_exprs);
+   if (cases) SdList_Delete(cases);
+   return result;
+}
+
+static SdResult SdParser_ParseMatchCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r then_expr = NULL;
+   SdList* exprs = NULL;
+
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
+   SdParser_READ_EXPECT_TYPE(SdTokenType_CASE);
+
+   exprs = SdList_New();
+   while (SdScanner_PeekType(scanner) != SdTokenType_COLON) {
+      SdValue_r expr = NULL;
+      SdParser_READ_EXPR(expr);
+      SdList_Append(exprs, expr);
+   }
+
+   SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
+   SdParser_READ_EXPR(then_expr);
+
+   *out_node = SdAst_MatchCase_New(env, exprs, then_expr);
+   exprs = NULL;
+end:
+   if (exprs) SdList_Delete(exprs);
    return result;
 }
 
@@ -3626,7 +3780,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    }
 
    closure = SdEnv_VariableSlot_Value(closure_slot);
-   if (SdValue_Type(closure) != SdType_FUNCTION || SdAst_NodeType(closure) != SdNodeType_CLOSURE) {
+   if (SdValue_Type(closure) != SdType_FUNCTION) {
       result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
       goto end;
    }
@@ -3762,6 +3916,10 @@ static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_
          result = SdEngine_EvaluateFunction(self, frame, expr, out_value);
          break;
 
+      case SdNodeType_MATCH:
+         result = SdEngine_EvaluateMatch(self, frame, expr, out_value);
+         break;
+
       default:
          result = SdFail(SdErr_INTERPRETER_BUG, "Unexpected node type.");
          break;
@@ -3800,6 +3958,95 @@ static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdVa
    *out_value = SdEnv_Closure_New(self->env, frame, SdAst_Function_ParameterNames(function), function,
       SdEnv_BoxList(self->env, SdList_New()));
    return SdResult_SUCCESS;
+}
+
+static SdResult SdEngine_EvaluateMatch(SdEngine_r self, SdValue_r frame, SdValue_r match, SdValue_r* out_value) {
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r cas = NULL, default_expr = NULL;
+   SdList_r exprs = NULL, cases = NULL;
+   SdValue_r* exprs_values = NULL;
+   SdValue_r* case_exprs_values = NULL;
+   size_t i = 0, j = 0, exprs_count = 0, cases_count = 0;
+
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(match);
+   SdAssert(out_value);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(match) == SdNodeType_MATCH);
+
+   exprs = SdAst_Match_Exprs(match);
+   cases = SdAst_Match_Cases(match);
+   default_expr = SdAst_Match_DefaultExpr(match);
+
+   if (SdList_Count(exprs) == 0) { /* we're matching the function arguments */
+      SdValue_r trace = SdEnv_GetCurrentCallTrace(self->env);
+      if (trace) {
+         SdList_r args_list = SdValue_GetList(SdEnv_CallTrace_Arguments(trace));
+         exprs_count = SdList_Count(args_list);
+         exprs_values = SdAlloc(exprs_count * sizeof(SdValue_r));
+         for (i = 0; i < exprs_count; i++)
+            exprs_values[i] = SdList_GetAt(args_list, i);
+      } else {
+         exprs_count = 0;
+         exprs_values = SdAlloc(0);
+      }
+   } else {
+      exprs_count = SdList_Count(exprs);
+      exprs_values = SdAlloc(exprs_count * sizeof(SdValue_r));
+      for (i = 0; i < exprs_count; i++) {
+         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, SdList_GetAt(exprs, i), &exprs_values[i])))
+            goto end;
+      }
+   }
+
+   cases_count = SdList_Count(cases);
+   for (i = 0; i < cases_count; i++) {
+      SdList_r case_exprs = NULL;
+      size_t case_exprs_count = 0;
+      SdBool is_match = SdTrue;
+
+      cas = SdList_GetAt(cases, i);
+      case_exprs = SdAst_MatchCase_IfExprs(cas);
+      case_exprs_count = SdList_Count(case_exprs);
+      if (case_exprs_count != exprs_count) {
+         result = SdFail(SdErr_ARGUMENT_MISMATCH, 
+            "The number of case values does not match the number of match arguments.");
+         goto end;
+      }
+
+      case_exprs_values = SdAlloc(exprs_count * sizeof(SdValue_r));
+      for (j = 0; j < case_exprs_count; j++) {
+         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, SdList_GetAt(case_exprs, j), &case_exprs_values[j])))
+            goto end;
+      }
+      
+      for (j = 0; j < case_exprs_count; j++) {
+         SdValue_r match_arg = NULL, case_value = NULL;
+
+         match_arg = exprs_values[j];
+         case_value = case_exprs_values[j];
+         if (!SdValue_Equals(match_arg, case_value)) {
+            is_match = SdFalse;
+            break;
+         }
+      }
+
+      if (is_match) {
+         SdValue_r then_expr = SdAst_MatchCase_ThenExpr(cas);
+         result = SdEngine_EvaluateExpr(self, frame, then_expr, out_value);
+         goto end;
+      }
+
+      SdFree(case_exprs_values);
+      case_exprs_values = NULL;
+   }
+
+   result = SdEngine_EvaluateExpr(self, frame, default_expr, out_value);
+end:
+   if (exprs_values) SdFree(exprs_values);
+   if (case_exprs_values) SdFree(case_exprs_values);
+   return result;
 }
 
 static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, SdValue_r* out_return) {
@@ -4236,10 +4483,11 @@ end:
 
 static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r expr = NULL, value = NULL, cas = NULL, case_expr = NULL, case_value = NULL, case_body = NULL, 
-      case_frame = NULL, default_body = NULL;
-   SdList_r cases = NULL;
-   size_t i = 0, count = 0;
+   SdValue_r cas = NULL, default_body = NULL, case_frame = NULL;
+   SdList_r exprs = NULL, cases = NULL;
+   SdValue_r* exprs_values = NULL;
+   SdValue_r* case_exprs_values = NULL;
+   size_t i = 0, j = 0, exprs_count = 0, cases_count = 0;
 
    SdAssert(self);
    SdAssert(frame);
@@ -4248,32 +4496,83 @@ static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue
    SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_SWITCH);
 
-   expr = SdAst_Switch_Expr(statement);
+   exprs = SdAst_Switch_Exprs(statement);
    cases = SdAst_Switch_Cases(statement);
    default_body = SdAst_Switch_DefaultBody(statement);
 
-   if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &value)))
-      return result;
+   if (SdList_Count(exprs) == 0) { /* we're matching the function arguments */
+      SdValue_r trace = SdEnv_GetCurrentCallTrace(self->env);
+      if (trace) {
+         SdList_r args_list = SdValue_GetList(SdEnv_CallTrace_Arguments(trace));
+         exprs_count = SdList_Count(args_list);
+         exprs_values = SdAlloc(exprs_count * sizeof(SdValue_r));
+         for (i = 0; i < exprs_count; i++)
+            exprs_values[i] = SdList_GetAt(args_list, i);
+      } else {
+         exprs_count = 0;
+         exprs_values = SdAlloc(0);
+      }
+   } else {
+      exprs_count = SdList_Count(exprs);
+      exprs_values = SdAlloc(exprs_count * sizeof(SdValue_r));
+      for (i = 0; i < exprs_count; i++) {
+         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, SdList_GetAt(exprs, i), &exprs_values[i])))
+            goto end;
+      }
+   }
 
-   count = SdList_Count(cases);
-   for (i = 0; i < count; i++) {
+   cases_count = SdList_Count(cases);
+   for (i = 0; i < cases_count; i++) {
+      SdList_r case_exprs = NULL;
+      size_t case_exprs_count = 0;
+      SdBool is_match = SdTrue;
+
       cas = SdList_GetAt(cases, i);
-      case_expr = SdAst_Case_Expr(cas);
-      case_value = NULL;
-      if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, case_expr, &case_value)))
-         return result;
-      if (SdValue_Equals(value, case_value)) {
-         case_body = SdAst_Case_Body(cas);
+      case_exprs = SdAst_SwitchCase_IfExprs(cas);
+      case_exprs_count = SdList_Count(case_exprs);
+      if (case_exprs_count != exprs_count) {
+         result = SdFail(SdErr_ARGUMENT_MISMATCH, 
+            "The number of case values does not match the number of switch arguments.");
+         goto end;
+      }
+
+      case_exprs_values = SdAlloc(exprs_count * sizeof(SdValue_r));
+      for (j = 0; j < case_exprs_count; j++) {
+         if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, SdList_GetAt(case_exprs, j), &case_exprs_values[j])))
+            goto end;
+      }
+      
+      for (j = 0; j < case_exprs_count; j++) {
+         SdValue_r switch_arg = NULL, case_value = NULL;
+
+         switch_arg = exprs_values[j];
+         case_value = case_exprs_values[j];
+         if (!SdValue_Equals(switch_arg, case_value)) {
+            is_match = SdFalse;
+            break;
+         }
+      }
+
+      if (is_match) {
+         SdValue_r case_body = NULL;
+
+         case_body = SdAst_SwitchCase_ThenBody(cas);
          case_frame = SdEnv_BeginFrame(self->env, frame);
          result = SdEngine_ExecuteBody(self, case_frame, case_body, out_return);
          SdEnv_EndFrame(self->env, case_frame);
-         return result;
+         goto end;
       }
+
+      SdFree(case_exprs_values);
+      case_exprs_values = NULL;
    }
 
    case_frame = SdEnv_BeginFrame(self->env, frame);
    result = SdEngine_ExecuteBody(self, case_frame, default_body, out_return);
    SdEnv_EndFrame(self->env, case_frame);
+end:
+   if (exprs_values) SdFree(exprs_values);
+   if (case_exprs_values) SdFree(case_exprs_values);
    return result;
 }
 
