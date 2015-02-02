@@ -105,6 +105,7 @@ struct SdEnv_s {
    SdChain* values_chain; /* contains all objects that haven't been deleted yet */
    SdValueSet* active_frames; /* contains all currently active frames in the interpreter engine */
    unsigned long allocation_count;
+   SdChain* call_stack; /* information about each call in the call stack */
 };
 
 struct SdValueSet_s {
@@ -1198,6 +1199,7 @@ SdEnv* SdEnv_New(void) {
    env->values_chain = SdChain_New(); /* must be done before calling SdEnv_Root_New */
    env->root = SdEnv_Root_New(env);
    env->active_frames = SdValueSet_New();
+   env->call_stack = SdChain_New();
    return env;
 }
 
@@ -1214,6 +1216,7 @@ void SdEnv_Delete(SdEnv* self) {
    SdEnv_CollectGarbage(self);
    SdAssert(SdChain_Count(self->values_chain) == 0); /* shouldn't be anything left */
    SdChain_Delete(self->values_chain);
+   SdChain_Delete(self->call_stack);
    SdFree(self);
 }
 
@@ -1399,6 +1402,39 @@ void SdEnv_EndFrame(SdEnv_r self, SdValue_r frame) {
    if (!SdValueSet_Remove(self->active_frames, frame)) {
       SdAssert(SdFalse); /* frame was supposed to be there, but was not */
    }
+}
+
+void SdEnv_PushCall(SdEnv_r self, SdValue_r name, SdValue_r arguments) {
+   SdAssert(self);
+   SdAssert(name);
+   SdAssertValue(name, SdType_STRING);
+   SdAssertValue(arguments, SdType_LIST);
+
+   SdChain_Push(self->call_stack, SdEnv_CallTrace_New(self, name, arguments));
+}
+
+void SdEnv_PopCall(SdEnv_r self) {
+   SdValue_r popped = NULL;
+   
+   SdAssert(self);
+   popped = SdChain_Pop(self->call_stack);
+   SdAssert(popped);
+}
+
+SdValue_r SdEnv_GetCurrentCallTrace(SdEnv_r self) {
+   SdChainNode_r node;
+
+   SdAssert(self);
+   node = SdChain_Head(self->call_stack);
+   if (node)
+      return SdChainNode_Value(node);
+   else
+      return NULL;
+}
+
+SdChain_r SdEnv_GetCallTraceChain(SdEnv_r self) {
+   SdAssert(self);
+   return self->call_stack;
 }
 
 SdValue_r SdEnv_BoxNil(SdEnv_r env) {
@@ -1967,6 +2003,20 @@ SdValue_r SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, Sd
       SdEnv_Closure_FunctionNode(self),
       SdEnv_BoxList(env, partial_arguments));
 }
+
+SdValue_r SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments) {
+   SdAst_BEGIN(SdNodeType_CALL_TRACE)
+
+   SdAssert(env);
+   SdAssertValue(name, SdType_STRING);
+   SdAssertValue(arguments, SdType_LIST);
+
+   SdAst_VALUE(name)
+   SdAst_VALUE(arguments)
+   SdAst_END
+}
+SdAst_VALUE_GETTER(SdEnv_CallTrace_Name, SdNodeType_CALL_TRACE, 1)
+SdAst_VALUE_GETTER(SdEnv_CallTrace_Arguments, SdNodeType_CALL_TRACE, 2)
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet* SdValueSet_New(void) {
@@ -3516,11 +3566,10 @@ SdResult SdEngine_ExecuteProgram(SdEngine_r self) {
 SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_name, SdList_r arguments, 
    SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
-   SdValue_r closure_slot = NULL, closure = NULL, function = NULL, call_frame = NULL;
-   SdList_r param_names = NULL, partial_arguments = NULL;
-   SdList* total_arguments = NULL;
-   SdString_r actual_function_name = NULL;
-   SdBool has_var_args = SdFalse;
+   SdValue_r closure_slot = NULL, closure = NULL, function = NULL, call_frame = NULL, total_arguments_value = NULL,
+      actual_function_name = NULL;
+   SdList_r param_names = NULL, partial_arguments = NULL, total_arguments = NULL;
+   SdBool has_var_args = SdFalse, in_call = SdFalse;
    size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
 
    SdAssert(self);
@@ -3543,7 +3592,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
       goto end;
    }
    function = SdEnv_Closure_FunctionNode(closure);
-   actual_function_name = SdValue_GetString(SdAst_Function_Name(function));
+   actual_function_name = SdAst_Function_Name(function);
       /* we may be calling through a closure stored in a variable with an arbitrary name, so grab the actual
          name that this function was originally defined with. */
 
@@ -3563,8 +3612,8 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    /* if any of the arguments are errors, then immediately return that error so that it propagates up the call chain,
       rather than executing the function. exception: type-of and error.message; these two functions are needed to
       actually handle errors. */
-   if (!SdString_EqualsCStr(actual_function_name, "type-of") && 
-       !SdString_EqualsCStr(actual_function_name, "error.message")) {
+   if (!SdString_EqualsCStr(SdValue_GetString(actual_function_name), "type-of") && 
+       !SdString_EqualsCStr(SdValue_GetString(actual_function_name), "error.message")) {
       count = SdList_Count(arguments);
       for (i = 0; i < count; i++) {
          SdValue_r argument = SdList_GetAt(arguments, i);
@@ -3582,12 +3631,17 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    }
 
    /* construct the total arguments list from the partial arguments and the current arguments */
-   total_arguments = SdList_New();
+   total_arguments_value = SdEnv_BoxList(self->env, SdList_New());
+   total_arguments = SdValue_GetList(total_arguments_value);
    for (i = 0; i < partial_arguments_count; i++)
       SdList_Append(total_arguments, SdList_GetAt(partial_arguments, i));
    count = SdList_Count(arguments);
    for (i = 0; i < count; i++)
       SdList_Append(total_arguments, SdList_GetAt(arguments, i));
+
+   /* push an entry in the call stack so that call traces work */
+   SdEnv_PushCall(self->env, actual_function_name, total_arguments_value);
+   in_call = SdTrue;
 
    /* if this is an intrinsic then call it now; no frame needed */
    if (SdAst_Function_IsImported(function)) {
@@ -3599,12 +3653,8 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    /* create a frame containing the argument values */
    call_frame = SdEnv_BeginFrame(self->env, SdEnv_Closure_Frame(closure));
    if (has_var_args) {
-      SdValue_r param_name = NULL, args_value = NULL;
-
-      param_name = SdList_GetAt(param_names, 0);
-      args_value = SdEnv_BoxList(self->env, total_arguments);
-      total_arguments = NULL;
-      if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, args_value)))
+      SdValue_r param_name = SdList_GetAt(param_names, 0);
+      if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, total_arguments_value)))
          goto end;
    } else {
       count = SdList_Count(total_arguments);
@@ -3626,7 +3676,7 @@ end:
    if (!*out_return)
       *out_return = SdEnv_BoxNil(self->env);
 
-   if (total_arguments) SdList_Delete(total_arguments);
+   if (in_call) SdEnv_PopCall(self->env);
    if (call_frame) SdEnv_EndFrame(self->env, call_frame);
    return result;
 }
