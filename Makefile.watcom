@@ -1,0 +1,17 @@
+# Open Watcom compiler
+
+#export PATH=$(PATH);C:\WATCOM\BINNT;C:\WATCOM\BINW
+export INCLUDE=C:\WATCOM\H;C:\WATCOM\H\NT;C:\WATCOM\H\NT;C:\WATCOM\H\NT\DIRECTX;C:\WATCOM\H\NT\DDK
+export WATCOM=C:\WATCOM
+export EDPATH=C:\WATCOM\EDDAT
+export WHTMLHELP=C:\WATCOM\BINNT\HELP
+export WIPFC=C:\WATCOM\WIPFC
+
+CC=owcc
+CFLAGS=-Wall -Wextra -Werror -x c -O3 -std=c89
+LFLAGS=
+SEP=\\
+SAD_OUT_FLAG=-o bin\\sad
+SAD_TEST_OUT_FLAG=-o bin\\sad-test
+
+include Makefile.base

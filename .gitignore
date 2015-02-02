@@ -3,6 +3,9 @@ a.exe
 sad.exe
 bin/
 testresults/
+*.obj
+*.o
+*.err
 
 #################
 ## Eclipse

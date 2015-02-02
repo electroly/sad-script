@@ -1,0 +1,41 @@
+SAD_SOURCES=src/sad.c src/sad-script.c
+SAD_TEST_SOURCES=src/sad-test.c
+
+TESTS=$(wildcard tests/*.sad)
+TESTRESULTS=$(TESTS:tests/%.sad=testresults/%.testresult)
+
+all: bin/sad bin/sad-test
+
+bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
+	$(CC) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_SOURCES)) $(SAD_OUT_FLAG)
+	-@rm -f *.obj
+	-@rm -f *.o
+
+bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
+	$(CC) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG)
+	-@rm -f *.obj
+	-@rm -f *.o
+
+bin/prelude.sad: src/prelude.sad
+	cp src/prelude.sad bin/prelude.sad
+
+bin:
+	mkdir bin
+
+testresults:
+	mkdir testresults
+
+cleantests:
+	@rm -f testresults/*
+
+clean: cleantests
+	@rm -f bin/*
+
+test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
+
+$(TESTRESULTS): 
+	@echo $(@:testresults/%.testresult=%)
+	-@bin/sad --prelude bin$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err
+	@cat $@.err >> $@
+	@rm $@.err
+	@bin/sad-test $(@:testresults/%.testresult=tests/%.sad) $@

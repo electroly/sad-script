@@ -1,0 +1,10 @@
+# Microsoft Visual C++ 2013 compiler
+
+CC=cmd /K msvc-cl.bat
+CFLAGS=
+LFLAGS=
+SEP=/
+SAD_OUT_FLAG=-Febin/sad
+SAD_TEST_OUT_FLAG=-Febin/sad-test
+
+include Makefile.base

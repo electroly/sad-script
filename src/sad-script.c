@@ -33,7 +33,6 @@
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
-#define assert(x) do { if (!(x)) { __debugbreak(); } } while(0)
 #else
 #include <assert.h>
 #endif
@@ -265,6 +264,7 @@ static SdResult SdEngine_Intrinsic_ErrorMessage(SdEngine_r self, SdList_r argume
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
+#define SdAssert(x) ((void)0)
 #define SdAssertValue(x,t) ((void)0)
 #define SdAssertNode(x,t) ((void)0)
 #define SdAssertExpr(x) ((void)0)
@@ -273,24 +273,26 @@ static SdResult SdEngine_Intrinsic_ErrorMessage(SdEngine_r self, SdList_r argume
 #define SdAssertAllNodesOfType(x,t) ((void)0)
 #define SdAssertNonEmptyString(x) ((void)0)
 #else
+#define SdAssert(x) assert((x) != 0)
+
 static void SdAssertValue(SdValue_r x, SdType t) {
-   assert(x);
-   assert(SdValue_Type(x) == t);
+   SdAssert(x);
+   SdAssert(SdValue_Type(x) == t);
 }
 
 static void SdAssertNode(SdValue_r x, SdNodeType t) {
    SdAssertValue(x, SdType_LIST);
-   assert(SdAst_NodeType(x) == t);
+   SdAssert(SdAst_NodeType(x) == t);
 }
 
 static void SdAssertExpr(SdValue_r x) {
    SdAssertValue(x, SdType_LIST);
-   assert(SdAst_NodeType(x) >= SdNodeType_EXPRESSIONS_FIRST && SdAst_NodeType(x) <= SdNodeType_EXPRESSIONS_LAST);
+   SdAssert(SdAst_NodeType(x) >= SdNodeType_EXPRESSIONS_FIRST && SdAst_NodeType(x) <= SdNodeType_EXPRESSIONS_LAST);
 }
 
 static void SdAssertAllValuesOfType(SdList_r x, SdType t) {
    size_t i = 0, count = 0;
-   assert(x);
+   SdAssert(x);
    count = SdList_Count(x);
    for (i = 0; i < count; i++) {
       SdValue_r value;
@@ -301,13 +303,13 @@ static void SdAssertAllValuesOfType(SdList_r x, SdType t) {
 
 static void SdAssertAllNodesOfTypes(SdList_r x, SdNodeType l, SdNodeType h) {
    size_t i = 0, count = 0;
-   assert(x);
-   assert(l <= h);
+   SdAssert(x);
+   SdAssert(l <= h);
    count = SdList_Count(x);
    for (i = 0; i < count; i++) {
       SdValue_r value = SdList_GetAt(x, i);
       SdAssertValue(value, SdType_LIST);
-      assert(SdAst_NodeType(value) >= l && SdAst_NodeType(value) <= h);
+      SdAssert(SdAst_NodeType(value) >= l && SdAst_NodeType(value) <= h);
    }
 }
 
@@ -316,8 +318,8 @@ static void SdAssertAllNodesOfType(SdList_r x, SdNodeType t) {
 }
 
 static void SdAssertNonEmptyString(SdString_r x) {
-   assert(x);
-   assert(SdString_Length(x) > 0);
+   SdAssert(x);
+   SdAssert(SdString_Length(x) > 0);
 }
 #endif
 
@@ -452,7 +454,7 @@ static char* SdStrdup(const char* src) {
    size_t length = 0;
    char* dst = NULL;
 
-   assert(src);
+   SdAssert(src);
    length = strlen(src);
    dst = SdAlloc(length + 1);
    memcpy(dst, src, length);
@@ -481,8 +483,8 @@ SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
 SdResult SdFail(SdErr code, const char* message) {
    SdResult err;
 
-   assert(code >= SdErr_FIRST && code <= SdErr_LAST);
-   assert(message);
+   SdAssert(code >= SdErr_FIRST && code <= SdErr_LAST);
+   SdAssert(message);
    memset(&err, 0, sizeof(err));
    err.code = code;
    strncpy(err.message, message, sizeof(err.message) - 1); 
@@ -494,9 +496,9 @@ SdResult SdFailWithStringSuffix(SdErr code, const char* message, SdString_r suff
    SdStringBuf* buf = NULL;
    SdResult result = SdResult_SUCCESS;
 
-   assert(code >= SdErr_FIRST && code <= SdErr_LAST);
-   assert(message);
-   assert(suffix);
+   SdAssert(code >= SdErr_FIRST && code <= SdErr_LAST);
+   SdAssert(message);
+   SdAssert(suffix);
    buf = SdStringBuf_New();
    SdStringBuf_AppendCStr(buf, message);
    SdStringBuf_AppendString(buf, suffix);
@@ -518,7 +520,7 @@ Sad* Sad_New(void) {
 }
 
 void Sad_Delete(Sad* self) {
-   assert(self);
+   SdAssert(self);
    SdEnv_Delete(self->env);
    SdEngine_Delete(self->engine);
    SdFree(self);
@@ -528,15 +530,15 @@ SdResult Sad_AddScript(Sad_r self, const char* code) {
    SdValue_r program_node = NULL;
    SdResult result = SdResult_SUCCESS;
 
-   assert(self);
-   assert(code);
+   SdAssert(self);
+   SdAssert(code);
    if (SdFailed(result = SdParser_ParseProgram(self->env, code, &program_node)))
       return result;
    return SdEnv_AddProgramAst(self->env, program_node);
 }
 
 SdResult Sad_Execute(Sad_r self) {
-   assert(self);
+   SdAssert(self);
    return SdEngine_ExecuteProgram(self->engine);
 }
 
@@ -544,8 +546,8 @@ SdResult Sad_ExecuteScript(Sad_r self, const char* code) {
    SdValue_r program_node = NULL;
    SdResult result = SdResult_SUCCESS;
 
-   assert(self);
-   assert(code);
+   SdAssert(self);
+   SdAssert(code);
    if (SdFailed(result = SdParser_ParseProgram(self->env, code, &program_node)))
       return result;
    if (SdFailed(result = SdEnv_AddProgramAst(self->env, program_node)))
@@ -554,7 +556,7 @@ SdResult Sad_ExecuteScript(Sad_r self, const char* code) {
 }
 
 SdEnv_r Sad_Env(Sad_r self) {
-   assert(self);
+   SdAssert(self);
    return self->env;
 }
 
@@ -568,7 +570,7 @@ SdString* SdString_New(void) {
 SdString* SdString_FromCStr(const char* cstr) {
    SdString* self = NULL;
 
-   assert(cstr);
+   SdAssert(cstr);
    self = SdAlloc(sizeof(SdString));
    self->buffer = SdStrdup(cstr);
    self->length = strlen(cstr);
@@ -576,30 +578,30 @@ SdString* SdString_FromCStr(const char* cstr) {
 }
 
 void SdString_Delete(SdString* self) {
-   assert(self);
+   SdAssert(self);
    SdFree(self->buffer);
    SdFree(self);
 }
 
 const char* SdString_CStr(SdString_r self) {
-   assert(self);
+   SdAssert(self);
    return self->buffer;
 }
 
 SdBool SdString_Equals(SdString_r a, SdString_r b) {
-   assert(a);
-   assert(b);
+   SdAssert(a);
+   SdAssert(b);
    return a->length == b->length && strcmp(a->buffer, b->buffer) == 0;
 }
 
 SdBool SdString_EqualsCStr(SdString_r a, const char* b) {
-   assert(a);
-   assert(b);
+   SdAssert(a);
+   SdAssert(b);
    return strcmp(a->buffer, b) == 0;  
 }
 
 size_t SdString_Length(SdString_r self) {
-   assert(self);
+   SdAssert(self);
    return self->length;
 }
 
@@ -607,8 +609,8 @@ int SdString_Compare(SdString_r a, SdString_r b) {
    const char* a_str = NULL;
    const char* b_str = NULL;
 
-   assert(a);
-   assert(b);
+   SdAssert(a);
+   SdAssert(b);
    a_str = SdString_CStr(a);
    b_str = SdString_CStr(b);
    return strcmp(a_str, b_str);
@@ -623,28 +625,28 @@ SdStringBuf* SdStringBuf_New(void) {
 }
 
 void SdStringBuf_Delete(SdStringBuf* self) {
-   assert(self);
+   SdAssert(self);
    SdFree(self->str);
    SdFree(self);
 }
 
 void SdStringBuf_AppendString(SdStringBuf_r self, SdString_r suffix) {
-   assert(self);
-   assert(suffix);
+   SdAssert(self);
+   SdAssert(suffix);
    SdStringBuf_AppendCStr(self, SdString_CStr(suffix));
 }
 
 void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
    int old_len = 0, suffix_len = 0, new_len = 0;
 
-   assert(self);
-   assert(suffix);
+   SdAssert(self);
+   SdAssert(suffix);
    old_len = self->len;
    suffix_len = strlen(suffix);
    new_len = old_len + suffix_len;
 
    self->str = SdRealloc(self->str, new_len + 1);
-   assert(self->str);
+   SdAssert(self->str);
    memcpy(&self->str[old_len], suffix, suffix_len);
    self->str[new_len] = 0;
    self->len = new_len;
@@ -653,13 +655,13 @@ void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
 void SdStringBuf_AppendChar(SdStringBuf_r self, char ch) {
    int old_len = 0, new_len = 0;
 
-   assert(self);
-   assert(ch != 0);
+   SdAssert(self);
+   SdAssert(ch != 0);
    old_len = self->len;
    new_len = old_len + 1;
 
    self->str = SdRealloc(self->str, new_len + 1);
-   assert(self->str);
+   SdAssert(self->str);
    self->str[old_len] = ch;
    self->str[new_len] = 0;
    self->len = new_len;
@@ -668,25 +670,25 @@ void SdStringBuf_AppendChar(SdStringBuf_r self, char ch) {
 void SdStringBuf_AppendInt(SdStringBuf_r self, int number) {
    char number_buf[30] = { 0 };
 
-   assert(self);
+   SdAssert(self);
    memset(number_buf, 0, sizeof(number_buf));
    sprintf(number_buf, "%d", number);
    SdStringBuf_AppendCStr(self, number_buf);
 }
 
 const char* SdStringBuf_CStr(SdStringBuf_r self) {
-   assert(self);
+   SdAssert(self);
    return self->str;
 }
 
 void SdStringBuf_Clear(SdStringBuf_r self) {
-   assert(self);
+   SdAssert(self);
    self->str[0] = 0;
    self->len = 0;
 }
 
 int SdStringBuf_Length(SdStringBuf_r self) {
-   assert(self);
+   SdAssert(self);
    return self->len;
 }
 
@@ -719,13 +721,13 @@ SdValue* SdValue_NewBool(SdBool x) {
 SdValue* SdValue_NewString(SdString* x) {
    SdValue* value = NULL;
 
-   assert(x);
+   SdAssert(x);
    value = SdAlloc(sizeof(SdValue));
    value->type = SdType_STRING;
    value->payload.string_value = x;
 
 #ifdef SD_DEBUG
-   assert(!x->is_boxed);
+   SdAssert(!x->is_boxed);
    x->is_boxed = SdTrue;
 #endif
 
@@ -735,13 +737,13 @@ SdValue* SdValue_NewString(SdString* x) {
 SdValue* SdValue_NewList(SdList* x) {
    SdValue* value = NULL;
 
-   assert(x);
+   SdAssert(x);
    value = SdAlloc(sizeof(SdValue));
    value->type = SdType_LIST;
    value->payload.list_value = x;
 
 #ifdef SD_DEBUG
-   assert(!x->is_boxed);
+   SdAssert(!x->is_boxed);
    x->is_boxed = SdTrue;
 #endif
 
@@ -761,7 +763,7 @@ SdValue* SdValue_NewError(SdList* x) {
 }
 
 void SdValue_Delete(SdValue* self) {
-   assert(self);
+   SdAssert(self);
    switch (SdValue_Type(self)) {
       case SdType_STRING:
          SdString_Delete(SdValue_GetString(self));
@@ -776,37 +778,37 @@ void SdValue_Delete(SdValue* self) {
 }
 
 SdType SdValue_Type(SdValue_r self) {
-   assert(self);
+   SdAssert(self);
    return self->type;
 }
 
 int SdValue_GetInt(SdValue_r self) {
-   assert(self);
-   assert(SdValue_Type(self) == SdType_INT);
+   SdAssert(self);
+   SdAssert(SdValue_Type(self) == SdType_INT);
    return self->payload.int_value;
 }
 
 double SdValue_GetDouble(SdValue_r self) {
-   assert(self);
-   assert(SdValue_Type(self) == SdType_DOUBLE);
+   SdAssert(self);
+   SdAssert(SdValue_Type(self) == SdType_DOUBLE);
    return self->payload.double_value;
 }
 
 SdBool SdValue_GetBool(SdValue_r self) {
-   assert(self);
-   assert(SdValue_Type(self) == SdType_BOOL);
+   SdAssert(self);
+   SdAssert(SdValue_Type(self) == SdType_BOOL);
    return self->payload.bool_value;
 }
 
 SdString_r SdValue_GetString(SdValue_r self) {
-   assert(self);
-   assert(SdValue_Type(self) == SdType_STRING);
+   SdAssert(self);
+   SdAssert(SdValue_Type(self) == SdType_STRING);
    return self->payload.string_value;
 }
 
 SdList_r SdValue_GetList(SdValue_r self) {
-   assert(self);
-   assert(
+   SdAssert(self);
+   SdAssert(
       SdValue_Type(self) == SdType_LIST ||
       SdValue_Type(self) == SdType_FUNCTION ||
       SdValue_Type(self) == SdType_ERROR);
@@ -816,8 +818,8 @@ SdList_r SdValue_GetList(SdValue_r self) {
 SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
    SdType a_type = SdType_NIL, b_type = SdType_NIL;
    
-   assert(a);
-   assert(b);
+   SdAssert(a);
+   SdAssert(b);
    a_type = SdValue_Type(a);
    b_type = SdValue_Type(b);
    if (a_type != b_type)
@@ -837,7 +839,7 @@ SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
 int SdValue_Hash(SdValue_r self) {
    int hash = 0;
 
-   assert(self);
+   SdAssert(self);
    switch (SdValue_Type(self)) {
       case SdType_NIL:
          hash = 0;
@@ -902,12 +904,12 @@ int SdValue_Hash(SdValue_r self) {
 }
 
 SdBool SdValue_IsGcMarked(SdValue_r self) {
-   assert(self);
+   SdAssert(self);
    return self->gc_mark;
 }
 
 void SdValue_SetGcMark(SdValue_r self, SdBool mark) {
-   assert(self);
+   SdAssert(self);
    self->gc_mark = mark;
 }
 
@@ -917,7 +919,7 @@ SdList* SdList_New(void) {
 }
 
 void SdList_Delete(SdList* self) {
-   assert(self);
+   SdAssert(self);
    SdFree(self->values);
    SdFree(self);
 }
@@ -925,32 +927,32 @@ void SdList_Delete(SdList* self) {
 void SdList_Append(SdList_r self, SdValue_r item) {
    int new_count = 0;
    
-   assert(self);
-   assert(item);
+   SdAssert(self);
+   SdAssert(item);
    new_count = self->count + 1;
    self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r));
-   assert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
+   SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
    self->values[new_count - 1] = item;
    self->count = new_count;
 }
 
 void SdList_SetAt(SdList_r self, size_t index, SdValue_r item) {
-   assert(self);
-   assert(item);
-   assert(index < self->count + 1);
+   SdAssert(self);
+   SdAssert(item);
+   SdAssert(index < self->count + 1);
    self->values[index] = item;
 }
 
 void SdList_InsertAt(SdList_r self, size_t index, SdValue_r item) {
-   assert(self);
-   assert(item);
-   assert(index <= self->count);
+   SdAssert(self);
+   SdAssert(item);
+   SdAssert(index <= self->count);
    if (index == self->count) {
       SdList_Append(self, item);
    } else {
       int new_count = self->count + 1;
       self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r));
-      assert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
+      SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
       memmove(&self->values[index + 1], &self->values[index], sizeof(SdValue_r) * (self->count - index));
       self->values[index] = item;
       self->count = new_count;
@@ -958,13 +960,13 @@ void SdList_InsertAt(SdList_r self, size_t index, SdValue_r item) {
 }
 
 SdValue_r SdList_GetAt(SdList_r self, size_t index) {
-   assert(self);
-   assert(index < self->count);
+   SdAssert(self);
+   SdAssert(index < self->count);
    return self->values[index];
 }
 
 size_t SdList_Count(SdList_r self) {
-   assert(self);
+   SdAssert(self);
    return self->count;
 }
 
@@ -972,8 +974,8 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
    size_t i = 0;
    SdValue_r old_value = NULL;
 
-   assert(self);
-   assert(index < self->count);
+   SdAssert(self);
+   SdAssert(index < self->count);
    old_value = SdList_GetAt(self, index);
    for (i = index + 1; i < self->count; i++) {
       self->values[i - 1] = self->values[i];
@@ -984,7 +986,7 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
 }
 
 void SdList_Clear(SdList_r self) {
-   assert(self);
+   SdAssert(self);
    SdFree(self->values);
    self->values = NULL;
    self->count = 0;
@@ -995,9 +997,9 @@ SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, vo
    int first = 0;
    int last = SdList_Count(list) - 1;
 
-   assert(list);
-   assert(compare_func);
-   assert(context);
+   SdAssert(list);
+   SdAssert(compare_func);
+   SdAssert(context);
    while (first <= last) {
       int pivot = (first + last) / 2;
       int compare = compare_func(SdList_GetAt(list, pivot), context);
@@ -1034,10 +1036,10 @@ SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, vo
 SdBool SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context) {
    SdSearchResult result = { 0, SdFalse };
    
-   assert(list);
-   assert(item);
-   assert(compare_func);
-   assert(context);
+   SdAssert(list);
+   SdAssert(item);
+   SdAssert(compare_func);
+   SdAssert(context);
    result = SdList_Search(list, compare_func, context);
    if (result.exact) { /* An item with this name already exists. */
       return SdFalse;
@@ -1050,8 +1052,8 @@ SdBool SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc 
 SdBool SdList_Equals(SdList_r a, SdList_r b) {
    size_t i = 0, a_count = 0, b_count = 0;
 
-   assert(a);
-   assert(b);
+   SdAssert(a);
+   SdAssert(b);
    a_count = SdList_Count(a);
    b_count = SdList_Count(b);
    if (a_count != b_count)
@@ -1078,8 +1080,8 @@ SdResult SdFile_WriteAllText(SdString_r file_path, SdString_r text) {
    FILE* fp = NULL;
    size_t count = 0;
 
-   assert(file_path);
-   assert(text);
+   SdAssert(file_path);
+   SdAssert(text);
    fp = fopen(SdString_CStr(file_path), "w");
    if (!fp) {
       result = SdFail(SdErr_CANNOT_OPEN_FILE, "Failed to open the file.");
@@ -1103,8 +1105,8 @@ SdResult SdFile_ReadAllText(SdString_r file_path, SdString** out_text) {
    FILE* fp = NULL;
    char line[1000] = { 0 };
 
-   assert(file_path);
-   assert(out_text);
+   SdAssert(file_path);
+   SdAssert(out_text);
    fp = fopen(SdString_CStr(file_path), "r");
    if (!fp) {
       result = SdFail(SdErr_CANNOT_OPEN_FILE, "Failed to open the file.");
@@ -1129,8 +1131,8 @@ The objects are sorted by name.  If an exact match is found, then its index is r
 match is returned.  The index may be one past the end of the list indicating that the search_name is higher than any 
 name in the list. */
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r search_name) {
-   assert(list);
-   assert(search_name);
+   SdAssert(list);
+   SdAssert(search_name);
    return SdList_Search(list, SdEnv_BinarySearchByName_CompareFunc, search_name);
 }
 
@@ -1139,8 +1141,8 @@ static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context) {
    SdString_r search_name = NULL, pivot_name = NULL;
    SdList_r pivot_item = NULL;
 
-   assert(lhs);
-   assert(context);
+   SdAssert(lhs);
+   SdAssert(context);
    search_name = context;
    pivot_item = SdValue_GetList(lhs);
    pivot_name = SdValue_GetString(SdList_GetAt(pivot_item, 1));
@@ -1152,8 +1154,8 @@ static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context) {
 static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
    SdString_r item_name = NULL;
    
-   assert(list);
-   assert(item);
+   SdAssert(list);
+   SdAssert(item);
    item_name = SdValue_GetString(SdList_GetAt(SdValue_GetList(item), 1));
    return SdList_InsertBySearch(list, item, SdEnv_BinarySearchByName_CompareFunc, item_name);
 }
@@ -1161,8 +1163,8 @@ static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
 #ifdef SD_DEBUG
 SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char* func) {
    printf("%x BOX -- Type %d -- Line %d -- %s\n", (unsigned int)value, SdValue_Type(value), line, func);
-   assert(self);
-   assert(value);
+   SdAssert(self);
+   SdAssert(value);
 
    /* ensure the value is not already in the chain. */
    do {
@@ -1182,8 +1184,8 @@ SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char*
 #define SdEnv_AddToGc(self, value) SdEnv_DebugAddToGc(self, value, __LINE__, __FUNCTION__);
 #else
 SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
-   assert(self);
-   assert(value);
+   SdAssert(self);
+   SdAssert(value);
 
    SdChain_Push(self->values_chain, value);
    self->allocation_count++;
@@ -1200,7 +1202,7 @@ SdEnv* SdEnv_New(void) {
 }
 
 void SdEnv_Delete(SdEnv* self) {
-   assert(self);
+   SdAssert(self);
 #ifdef SD_DEBUG
    SdDebugDumpValue(self->root);
    SdDebugDumpChain(self->values_chain);
@@ -1210,13 +1212,13 @@ void SdEnv_Delete(SdEnv* self) {
    SdValueSet_Delete(self->active_frames);
    self->active_frames = NULL;
    SdEnv_CollectGarbage(self);
-   assert(SdChain_Count(self->values_chain) == 0); /* shouldn't be anything left */
+   SdAssert(SdChain_Count(self->values_chain) == 0); /* shouldn't be anything left */
    SdChain_Delete(self->values_chain);
    SdFree(self);
 }
 
 SdValue_r SdEnv_Root(SdEnv_r self) {
-   assert(self);
+   SdAssert(self);
    return self->root;
 }
 
@@ -1225,8 +1227,8 @@ SdResult SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node) {
    SdList_r root_functions = NULL, root_statements = NULL, new_functions = NULL, new_statements = NULL;
    size_t new_functions_count = 0, new_statements_count = 0, i = 0;
 
-   assert(self);
-   assert(program_node);
+   SdAssert(self);
+   SdAssert(program_node);
    root_functions = SdEnv_Root_Functions(self->root);
    root_statements = SdEnv_Root_Statements(self->root);
    new_functions = SdAst_Program_Functions(program_node);
@@ -1259,7 +1261,7 @@ void SdEnv_CollectGarbage(SdEnv_r self) {
    SdList_r active_frames_list = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
+   SdAssert(self);
    
    /* clear all marks */
    value_node = SdChain_Head(self->values_chain);
@@ -1299,7 +1301,7 @@ void SdEnv_CollectGarbage(SdEnv_r self) {
 static void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root) {
    SdChain* stack = NULL;
    
-   assert(root);
+   SdAssert(root);
    stack = SdChain_New();
    SdChain_Push(stack, root);
 
@@ -1327,10 +1329,10 @@ SdResult SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue
    SdValue_r slot = NULL;
    SdList_r slots = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(name);
-   assert(value);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(name);
+   SdAssert(value);
    slots = SdEnv_Frame_VariableSlots(frame);
    slot = SdEnv_VariableSlot_New(self, name, value);
    if (SdEnv_InsertByName(slots, slot))
@@ -1343,9 +1345,9 @@ SdValue_r SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name,
    SdValue_r value = NULL;
 
    SdUnreferenced(self);
-   assert(self);
-   assert(frame);
-   assert(name);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(name);
    while (SdValue_Type(frame) != SdType_NIL) {
       value = SdEnv_FindVariableSlotInFrame(name, frame);
       if (value)
@@ -1364,8 +1366,8 @@ static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame)
    SdList_r slots = NULL;
    SdSearchResult search_result = { 0, SdFalse };
 
-   assert(name);
-   assert(frame);
+   SdAssert(name);
+   SdAssert(frame);
    slots = SdEnv_Frame_VariableSlots(frame);
    search_result = SdEnv_BinarySearchByName(slots, name);
    if (search_result.exact) {
@@ -1377,69 +1379,69 @@ static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame)
 }
 
 unsigned long SdEnv_AllocationCount(SdEnv_r self) {
-   assert(self);
+   SdAssert(self);
    return self->allocation_count;
 }
 
 SdValue_r SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent) {
    SdValue_r frame = NULL;
    
-   assert(self);
-   assert(parent);
+   SdAssert(self);
+   SdAssert(parent);
    frame = SdEnv_Frame_New(self, parent);
    SdValueSet_Add(self->active_frames, frame);
    return frame;
 }
 
 void SdEnv_EndFrame(SdEnv_r self, SdValue_r frame) {
-   assert(self);
-   assert(frame);
+   SdAssert(self);
+   SdAssert(frame);
    if (!SdValueSet_Remove(self->active_frames, frame)) {
-      assert(SdFalse); /* frame was supposed to be there, but was not */
+      SdAssert(SdFalse); /* frame was supposed to be there, but was not */
    }
 }
 
 SdValue_r SdEnv_BoxNil(SdEnv_r env) {
-   assert(env);
+   SdAssert(env);
    return SdEnv_AddToGc(env, SdValue_NewNil());
 }
 
 SdValue_r SdEnv_BoxInt(SdEnv_r env, int x) {
-   assert(env);
+   SdAssert(env);
    return SdEnv_AddToGc(env, SdValue_NewInt(x));
 }
 
 SdValue_r SdEnv_BoxDouble(SdEnv_r env, double x) {
-   assert(env);
+   SdAssert(env);
    return SdEnv_AddToGc(env, SdValue_NewDouble(x));
 }
 
 SdValue_r SdEnv_BoxBool(SdEnv_r env, SdBool x) {
-   assert(env);
+   SdAssert(env);
    return SdEnv_AddToGc(env, SdValue_NewBool(x));
 }
 
 SdValue_r SdEnv_BoxString(SdEnv_r env, SdString* x) {
-   assert(env);
-   assert(x);
+   SdAssert(env);
+   SdAssert(x);
    return SdEnv_AddToGc(env, SdValue_NewString(x));
 }
 
 SdValue_r SdEnv_BoxList(SdEnv_r env, SdList* x) {
-   assert(env);
-   assert(x);
+   SdAssert(env);
+   SdAssert(x);
    return SdEnv_AddToGc(env, SdValue_NewList(x));
 }
 
 SdValue_r SdEnv_BoxFunction(SdEnv_r env, SdList* x) {
-   assert(env);
-   assert(x);
+   SdAssert(env);
+   SdAssert(x);
    return SdEnv_AddToGc(env, SdValue_NewFunction(x));
 }
 
 SdValue_r SdEnv_BoxError(SdEnv_r env, SdList* x) {
-   assert(env);
-   assert(x);
+   SdAssert(env);
+   SdAssert(x);
    return SdEnv_AddToGc(env, SdValue_NewError(x));
 }
 
@@ -1447,7 +1449,7 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
    SdValue_r frame = NULL;
    SdList* root_list = NULL;
 
-   assert(env);
+   SdAssert(env);
    frame = SdEnv_Frame_New(env, NULL);
    root_list = SdList_New();
    SdList_Append(root_list, SdEnv_BoxInt(env, SdNodeType_ROOT));
@@ -1482,8 +1484,8 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
    return SdAst_NewNode(env, values, i);
 #define SdAst_UNBOXED_GETTER(function_name, node_type, result_type, value_getter, index) \
    result_type function_name(SdValue_r self) { \
-      assert(self); \
-      assert(SdAst_NodeType(self) == node_type); \
+      SdAssert(self); \
+      SdAssert(SdAst_NodeType(self) == node_type); \
       return value_getter(SdAst_NodeValue(self, index)); \
    }
 #define SdAst_INT_GETTER(function_name, node_type, index) \
@@ -1498,18 +1500,18 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
    SdAst_UNBOXED_GETTER(function_name, node_type, SdList_r, SdValue_GetList, index)
 #define SdAst_VALUE_GETTER(function_name, node_type, index) \
    SdValue_r function_name(SdValue_r self) { \
-      assert(self); \
-      assert(SdAst_NodeType(self) == node_type); \
+      SdAssert(self); \
+      SdAssert(SdAst_NodeType(self) == node_type); \
       return SdAst_NodeValue(self, index); \
    }
 
 static SdValue_r SdAst_NodeValue(SdValue_r node, size_t value_index) {
-   assert(node);
+   SdAssert(node);
    return SdList_GetAt(SdValue_GetList(node), value_index);
 }
 
 SdNodeType SdAst_NodeType(SdValue_r node) {
-   assert(node);
+   SdAssert(node);
    return SdValue_GetInt(SdAst_NodeValue(node, 0));
 }
 
@@ -1517,11 +1519,11 @@ static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_value
    SdList* node = NULL;
    size_t i = 0;
 
-   assert(env);
-   assert(values);
+   SdAssert(env);
+   SdAssert(values);
    node = SdList_New();
    for (i = 0; i < num_values; i++) {
-      assert(values[i]);
+      SdAssert(values[i]);
       SdList_Append(node, values[i]);
    }
    return SdEnv_BoxList(env, node);
@@ -1531,11 +1533,11 @@ static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t n
    SdList* node = NULL;
    size_t i = 0;
 
-   assert(env);
-   assert(values);
+   SdAssert(env);
+   SdAssert(values);
    node = SdList_New();
    for (i = 0; i < num_values; i++) {
-      assert(values[i]);
+      SdAssert(values[i]);
       SdList_Append(node, values[i]);
    }
    return SdEnv_BoxFunction(env, node);
@@ -1544,7 +1546,7 @@ static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t n
 SdValue_r SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* statements) {
    SdAst_BEGIN(SdNodeType_PROGRAM)
    
-   assert(env);
+   SdAssert(env);
    SdAssertAllNodesOfType(functions, SdNodeType_FUNCTION);
    SdAssertAllNodesOfTypes(statements, SdNodeType_STATEMENTS_FIRST, SdNodeType_STATEMENTS_LAST);
    
@@ -1559,7 +1561,7 @@ SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* param
    SdBool is_imported, SdBool has_var_args) {
    SdAst_BEGIN(SdNodeType_FUNCTION)
 
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(function_name);
    SdAssertAllValuesOfType(parameter_names, SdType_STRING);
    SdAssertNode(body, SdNodeType_BODY);
@@ -1580,7 +1582,7 @@ SdAst_BOOL_GETTER(SdAst_Function_HasVariableLengthArgumentList, SdNodeType_FUNCT
 SdValue_r SdAst_Body_New(SdEnv_r env, SdList* statements) {
    SdAst_BEGIN(SdNodeType_BODY)
 
-   assert(env);
+   SdAssert(env);
    SdAssertAllNodesOfTypes(statements, SdNodeType_STATEMENTS_FIRST, SdNodeType_STATEMENTS_LAST);
 
    SdAst_LIST(statements);
@@ -1591,9 +1593,9 @@ SdAst_LIST_GETTER(SdAst_Body_Statements, SdNodeType_BODY, 1)
 SdValue_r SdAst_Call_New(SdEnv_r env, SdString* function_name, SdList* arguments) {
    SdAst_BEGIN(SdNodeType_CALL)
 
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(function_name);
-   assert(arguments);
+   SdAssert(arguments);
 
    SdAst_STRING(function_name)
    SdAst_LIST(arguments)
@@ -1605,7 +1607,7 @@ SdAst_LIST_GETTER(SdAst_Call_Arguments, SdNodeType_CALL, 2)
 SdValue_r SdAst_Var_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr) {
    SdAst_BEGIN(SdNodeType_VAR)
 
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(variable_name);
    SdAssertExpr(value_expr);
 
@@ -1619,7 +1621,7 @@ SdAst_VALUE_GETTER(SdAst_Var_ValueExpr, SdNodeType_VAR, 2)
 SdValue_r SdAst_Set_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr) {
    SdAst_BEGIN(SdNodeType_SET)
 
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(variable_name);
    SdAssertExpr(value_expr);
 
@@ -1633,7 +1635,7 @@ SdAst_VALUE_GETTER(SdAst_Set_ValueExpr, SdNodeType_SET, 2)
 SdValue_r SdAst_MultiVar_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr) {
    SdAst_BEGIN(SdNodeType_MULTI_VAR)
 
-   assert(env);
+   SdAssert(env);
    SdAssertAllValuesOfType(variable_names, SdType_STRING);
    SdAssertExpr(value_expr);
 
@@ -1647,7 +1649,7 @@ SdAst_VALUE_GETTER(SdAst_MultiVar_ValueExpr, SdNodeType_MULTI_VAR, 2)
 SdValue_r SdAst_MultiSet_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr) {
    SdAst_BEGIN(SdNodeType_MULTI_SET)
 
-   assert(env);
+   SdAssert(env);
    SdAssertAllValuesOfType(variable_names, SdType_STRING);
    SdAssertExpr(value_expr);
 
@@ -1662,7 +1664,7 @@ SdValue_r SdAst_If_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r true_bod
    SdValue_r else_body) {
    SdAst_BEGIN(SdNodeType_IF)
 
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(condition_expr);
    SdAssertNode(true_body, SdNodeType_BODY);
    SdAssertAllNodesOfType(else_ifs, SdNodeType_ELSEIF);
@@ -1682,7 +1684,7 @@ SdAst_VALUE_GETTER(SdAst_If_ElseBody, SdNodeType_IF, 4)
 SdValue_r SdAst_ElseIf_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body) {
    SdAst_BEGIN(SdNodeType_ELSEIF)
    
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(condition_expr);
    SdAssertNode(body, SdNodeType_BODY);
 
@@ -1697,7 +1699,7 @@ SdValue_r SdAst_For_New(SdEnv_r env, SdString* variable_name, SdValue_r start_ex
    SdValue_r body) {
    SdAst_BEGIN(SdNodeType_FOR)
    
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(variable_name);
    SdAssertExpr(start_expr);
    SdAssertExpr(stop_expr);
@@ -1718,7 +1720,7 @@ SdValue_r SdAst_ForEach_New(SdEnv_r env, SdString* iter_name, SdString* index_na
    SdValue_r body) {
    SdAst_BEGIN(SdNodeType_FOREACH)
    
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(iter_name);
    SdAssertExpr(haystack_expr);
    SdAssertNode(body, SdNodeType_BODY);
@@ -1742,7 +1744,7 @@ SdAst_VALUE_GETTER(SdAst_ForEach_Body, SdNodeType_FOREACH, 4)
 SdValue_r SdAst_While_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body) {
    SdAst_BEGIN(SdNodeType_WHILE)
 
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(condition_expr);
    SdAssertNode(body, SdNodeType_BODY);
 
@@ -1757,7 +1759,7 @@ SdValue_r SdAst_Do_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body) {
    SdAst_BEGIN(SdNodeType_DO)
    
    
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(condition_expr);
    SdAssertNode(body, SdNodeType_BODY);
 
@@ -1771,7 +1773,7 @@ SdAst_VALUE_GETTER(SdAst_Do_Body, SdNodeType_DO, 2)
 SdValue_r SdAst_Switch_New(SdEnv_r env, SdValue_r expr, SdList* cases, SdValue_r default_body) {
    SdAst_BEGIN(SdNodeType_SWITCH)
    
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(expr);
    SdAssertAllNodesOfType(cases, SdNodeType_CASE);
    SdAssertNode(default_body, SdNodeType_BODY);
@@ -1788,7 +1790,7 @@ SdAst_VALUE_GETTER(SdAst_Switch_DefaultBody, SdNodeType_SWITCH, 3)
 SdValue_r SdAst_Case_New(SdEnv_r env, SdValue_r expr, SdValue_r body) {
    SdAst_BEGIN(SdNodeType_CASE)
 
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(expr);
    SdAssertNode(body, SdNodeType_BODY);
 
@@ -1802,7 +1804,7 @@ SdAst_VALUE_GETTER(SdAst_Case_Body, SdNodeType_CASE, 2)
 SdValue_r SdAst_Return_New(SdEnv_r env, SdValue_r expr) {
    SdAst_BEGIN(SdNodeType_RETURN)
 
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(expr);
 
    SdAst_VALUE(expr)
@@ -1813,7 +1815,7 @@ SdAst_VALUE_GETTER(SdAst_Return_Expr, SdNodeType_RETURN, 1)
 SdValue_r SdAst_Die_New(SdEnv_r env, SdValue_r expr) {
    SdAst_BEGIN(SdNodeType_DIE)
 
-   assert(env);
+   SdAssert(env);
    SdAssertExpr(expr);
 
    SdAst_VALUE(expr)
@@ -1824,7 +1826,7 @@ SdAst_VALUE_GETTER(SdAst_Die_Expr, SdNodeType_DIE, 1)
 SdValue_r SdAst_IntLit_New(SdEnv_r env, int value) {
    SdAst_BEGIN(SdNodeType_INT_LIT)
 
-   assert(env);
+   SdAssert(env);
 
    SdAst_INT(value)
    SdAst_END
@@ -1834,7 +1836,7 @@ SdAst_VALUE_GETTER(SdAst_IntLit_Value, SdNodeType_INT_LIT, 1)
 SdValue_r SdAst_DoubleLit_New(SdEnv_r env, double value) {
    SdAst_BEGIN(SdNodeType_DOUBLE_LIT)
 
-   assert(env);
+   SdAssert(env);
 
    SdAst_DOUBLE(value)
    SdAst_END
@@ -1844,7 +1846,7 @@ SdAst_VALUE_GETTER(SdAst_DoubleLit_Value, SdNodeType_DOUBLE_LIT, 1)
 SdValue_r SdAst_BoolLit_New(SdEnv_r env, SdBool value) {
    SdAst_BEGIN(SdNodeType_BOOL_LIT)
 
-   assert(env);
+   SdAssert(env);
 
    SdAst_BOOL(value)
    SdAst_END
@@ -1854,8 +1856,8 @@ SdAst_VALUE_GETTER(SdAst_BoolLit_Value, SdNodeType_BOOL_LIT, 1)
 SdValue_r SdAst_StringLit_New(SdEnv_r env, SdString* value) {
    SdAst_BEGIN(SdNodeType_STRING_LIT)
 
-   assert(env);
-   assert(value);
+   SdAssert(env);
+   SdAssert(value);
 
    SdAst_STRING(value)
    SdAst_END
@@ -1865,7 +1867,7 @@ SdAst_VALUE_GETTER(SdAst_StringLit_Value, SdNodeType_STRING_LIT, 1)
 SdValue_r SdAst_NilLit_New(SdEnv_r env) {
    SdAst_BEGIN(SdNodeType_NIL_LIT)
 
-   assert(env);
+   SdAssert(env);
 
    SdAst_END
 }
@@ -1873,7 +1875,7 @@ SdValue_r SdAst_NilLit_New(SdEnv_r env) {
 SdValue_r SdAst_VarRef_New(SdEnv_r env, SdString* identifier) {
    SdAst_BEGIN(SdNodeType_VAR_REF)
 
-   assert(env);
+   SdAssert(env);
    SdAssertNonEmptyString(identifier);
 
    SdAst_STRING(identifier)
@@ -1889,7 +1891,7 @@ SdAst_VALUE_GETTER(SdEnv_Root_BottomFrame, SdNodeType_ROOT, 3)
 SdValue_r SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null) {
    SdAst_BEGIN(SdNodeType_FRAME)
 
-   assert(env);
+   SdAssert(env);
 
    if (parent_or_null) {
       SdAssertNode(parent_or_null, SdNodeType_FRAME);
@@ -1906,10 +1908,10 @@ SdAst_LIST_GETTER(SdEnv_Frame_VariableSlots, SdNodeType_FRAME, 2)
 SdValue_r SdEnv_VariableSlot_New(SdEnv_r env, SdValue_r name, SdValue_r value) {
    SdAst_BEGIN(SdNodeType_VAR_SLOT)
 
-   assert(env);
+   SdAssert(env);
    SdAssertValue(name, SdType_STRING);
    SdAssertNonEmptyString(SdValue_GetString(name));
-   assert(value);
+   SdAssert(value);
 
    SdAst_VALUE(name)
    SdAst_VALUE(value)
@@ -1920,7 +1922,7 @@ SdAst_VALUE_GETTER(SdEnv_VariableSlot_Value, SdNodeType_VAR_SLOT, 2)
 
 void SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value) {
    SdAssertNode(self, SdNodeType_VAR_SLOT);
-   assert(value);
+   SdAssert(value);
 
    SdList_SetAt(SdValue_GetList(self), 2, value);
 }
@@ -1929,7 +1931,7 @@ SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names,
    SdValue_r partial_arguments) {
    SdAst_BEGIN(SdNodeType_CLOSURE)
 
-   assert(env);
+   SdAssert(env);
    SdAssertNode(frame, SdNodeType_FRAME);
    SdAssertAllValuesOfType(SdValue_GetList(param_names), SdType_STRING);
    SdAssertNode(function_node, SdNodeType_FUNCTION);
@@ -1950,9 +1952,9 @@ SdValue_r SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, Sd
    SdList* partial_arguments = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
-   assert(env);
-   assert(arguments);
+   SdAssert(self);
+   SdAssert(env);
+   SdAssert(arguments);
 
    partial_arguments = SdList_Clone(SdValue_GetList(SdEnv_Closure_PartialArguments(self)));
    count = SdList_Count(arguments);
@@ -1974,7 +1976,7 @@ SdValueSet* SdValueSet_New(void) {
 }
 
 void SdValueSet_Delete(SdValueSet* self) {
-   assert(self);
+   SdAssert(self);
    SdList_Delete(self->list);
    SdFree(self);
 }
@@ -1982,8 +1984,8 @@ void SdValueSet_Delete(SdValueSet* self) {
 static int SdValueSet_CompareFunc(SdValue_r lhs, void* context) { /* compare the pointer values */
    SdValue_r rhs = NULL;
 
-   assert(lhs);
-   assert(context);
+   SdAssert(lhs);
+   SdAssert(context);
    rhs = context;
    if (lhs < rhs) {
       return -1;
@@ -1995,16 +1997,16 @@ static int SdValueSet_CompareFunc(SdValue_r lhs, void* context) { /* compare the
 }
 
 SdBool SdValueSet_Add(SdValueSet_r self, SdValue_r item) { /* true = added, false = already exists */
-   assert(self);
-   assert(item);
+   SdAssert(self);
+   SdAssert(item);
    return SdList_InsertBySearch(self->list, item, SdValueSet_CompareFunc, item);
 }
 
 SdBool SdValueSet_Has(SdValueSet_r self, SdValue_r item) {
    SdSearchResult result = { 0, SdFalse };
 
-   assert(self);
-   assert(item);
+   SdAssert(self);
+   SdAssert(item);
    result = SdList_Search(self->list, SdValueSet_CompareFunc, item);
    return result.exact;
 }
@@ -2012,8 +2014,8 @@ SdBool SdValueSet_Has(SdValueSet_r self, SdValue_r item) {
 SdBool SdValueSet_Remove(SdValueSet_r self, SdValue_r item) { /* true = removed, false = wasn't there */
    SdSearchResult result = { 0, SdFalse };
 
-   assert(self);
-   assert(item);
+   SdAssert(self);
+   SdAssert(item);
    result = SdList_Search(self->list, SdValueSet_CompareFunc, item);
    if (result.exact) { 
       SdList_RemoveAt(self->list, result.index);
@@ -2024,7 +2026,7 @@ SdBool SdValueSet_Remove(SdValueSet_r self, SdValue_r item) { /* true = removed,
 }
 
 SdList_r SdValueSet_GetList(SdValueSet_r self) {
-   assert(self);
+   SdAssert(self);
    return self->list;
 }
 
@@ -2036,7 +2038,7 @@ SdChain* SdChain_New(void) {
 void SdChain_Delete(SdChain* self) {
    SdChainNode* node = NULL;
 
-   assert(self);
+   SdAssert(self);
    node = self->head;
    while (node) {
       SdChainNode* next = node->next;
@@ -2048,15 +2050,15 @@ void SdChain_Delete(SdChain* self) {
 }
 
 size_t SdChain_Count(SdChain_r self) {
-   assert(self);
+   SdAssert(self);
    return self->count;
 }
 
 void SdChain_Push(SdChain_r self, SdValue_r item) {
    SdChainNode* node = NULL;
 
-   assert(self);
-   assert(item);
+   SdAssert(self);
+   SdAssert(item);
 
    node = SdAlloc(sizeof(SdChainNode));
    node->value = item;
@@ -2070,7 +2072,7 @@ void SdChain_Push(SdChain_r self, SdValue_r item) {
 }
 
 SdValue_r SdChain_Pop(SdChain_r self) { /* may be null if the list is empty */
-   assert(self);
+   SdAssert(self);
 
    if (self->head) {
       SdChainNode* next = NULL;
@@ -2091,13 +2093,13 @@ SdValue_r SdChain_Pop(SdChain_r self) { /* may be null if the list is empty */
 }
 
 SdChainNode_r SdChain_Head(SdChain_r self) { /* may be null if the list is empty */
-   assert(self);
+   SdAssert(self);
    return self->head;
 }
 
 void SdChain_Remove(SdChain_r self, SdChainNode_r node) {
-   assert(self);
-   assert(node);
+   SdAssert(self);
+   SdAssert(node);
 
    if (node->prev) {
       node->prev->next = node->next;
@@ -2114,17 +2116,17 @@ void SdChain_Remove(SdChain_r self, SdChainNode_r node) {
 }
 
 SdValue_r SdChainNode_Value(SdChainNode_r self) {
-   assert(self);
+   SdAssert(self);
    return self->value;
 }
 
 SdChainNode_r SdChainNode_Prev(SdChainNode_r self) { /* null for the head node */
-   assert(self);
+   SdAssert(self);
    return self->prev;
 }
 
 SdChainNode_r SdChainNode_Next(SdChainNode_r self) { /* null for the tail node */
-   assert(self);
+   SdAssert(self);
    return self->next;
 }
 
@@ -2132,7 +2134,7 @@ SdChainNode_r SdChainNode_Next(SdChainNode_r self) { /* null for the tail node *
 SdToken* SdToken_New(int source_line, SdTokenType type, char* text) {
    SdToken* self = NULL;
 
-   assert(text);
+   SdAssert(text);
    self = SdAlloc(sizeof(SdToken));
    self->source_line = source_line;
    self->type = type;
@@ -2141,23 +2143,23 @@ SdToken* SdToken_New(int source_line, SdTokenType type, char* text) {
 }
 
 void SdToken_Delete(SdToken* self) {
-   assert(self);
+   SdAssert(self);
    SdFree(self->text);
    SdFree(self);
 }
 
 int SdToken_SourceLine(SdToken_r self) {
-   assert(self);
+   SdAssert(self);
    return self->source_line;
 }
 
 SdTokenType SdToken_Type(SdToken_r self) {
-   assert(self);
+   SdAssert(self);
    return self->type;
 }
 
 const char* SdToken_Text(SdToken_r self) {
-   assert(self);
+   SdAssert(self);
    return self->text;
 }
 
@@ -2169,7 +2171,7 @@ SdScanner* SdScanner_New(void) {
 void SdScanner_Delete(SdScanner* self) {
    SdScannerNode* node = NULL;
 
-   assert(self);
+   SdAssert(self);
    node = self->head;
    while (node) {
       SdScannerNode* next = node->next;
@@ -2186,8 +2188,8 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
    int source_line = 1;
    SdStringBuf* current_text = NULL;
 
-   assert(self);
-   assert(text);
+   SdAssert(self);
+   SdAssert(text);
    current_text = SdStringBuf_New();
    text_length = strlen(text);
    for (i = 0; i < text_length; i++) {
@@ -2340,8 +2342,8 @@ static void SdScanner_AppendToken(SdScanner_r self, int source_line, const char*
    SdToken* token = NULL;
    SdScannerNode* new_node = NULL;
    
-   assert(self);
-   assert(token_text);
+   SdAssert(self);
+   SdAssert(token_text);
    token = SdToken_New(source_line, SdScanner_ClassifyToken(token_text), SdStrdup(token_text));
 
    new_node = SdAlloc(sizeof(SdScannerNode));
@@ -2352,15 +2354,15 @@ static void SdScanner_AppendToken(SdScanner_r self, int source_line, const char*
       self->tail->next = new_node;
       self->tail = new_node;
    } else { /* list is empty */
-      assert(!self->head);
+      SdAssert(!self->head);
       self->head = new_node;
       self->tail = new_node;
    }
 }
 
 static SdTokenType SdScanner_ClassifyToken(const char* text) {
-   assert(text);
-   assert(strlen(text) > 0);
+   SdAssert(text);
+   SdAssert(strlen(text) > 0);
 
    switch ((unsigned char)text[0]) {
       case '"': return SdTokenType_STRING_LIT;
@@ -2462,9 +2464,9 @@ static SdBool SdScanner_IsIntLit(const char* text) {
    size_t i = 0, length = 0;
    int digits = 0;
 
-   assert(text);
+   SdAssert(text);
    length = strlen(text);
-   assert(length > 0);
+   SdAssert(length > 0);
    for (i = 0; i < length; i++) {
       if (text[i] == '-' && i == 0) {
          /* negative sign okay in the first character position */
@@ -2482,9 +2484,9 @@ static SdBool SdScanner_IsDoubleLit(const char* text) {
    SdBool dot = SdFalse;
    int digits = 0;
 
-   assert(text);
+   SdAssert(text);
    length = strlen(text);
-   assert(length > 0);
+   SdAssert(length > 0);
    for (i = 0; i < length; i++) {
       if (text[i] == '-' && i == 0) {
          /* negative sign okay in the first character position */
@@ -2501,13 +2503,13 @@ static SdBool SdScanner_IsDoubleLit(const char* text) {
 }
 
 SdBool SdScanner_IsEof(SdScanner_r self) {
-   assert(self);
+   SdAssert(self);
    return !self->cursor;
 }
 
 SdBool SdScanner_Peek(SdScanner_r self, SdToken_r* out_token) { /* true = token was read, false = eof */
-   assert(self);
-   assert(out_token);
+   SdAssert(self);
+   SdAssert(out_token);
    if (self->cursor) {
       *out_token = self->cursor->token;
       return SdTrue;
@@ -2535,8 +2537,8 @@ SdToken_r SdScanner_PeekToken(SdScanner_r self) {
 }
 
 SdBool SdScanner_Read(SdScanner_r self, SdToken_r* out_token) { /* true = token was read, false = eof */
-   assert(self);
-   assert(out_token);
+   SdAssert(self);
+   SdAssert(out_token);
    if (self->cursor) {
       *out_token = self->cursor->token;
       self->cursor = self->cursor->next;
@@ -2587,7 +2589,7 @@ static SdResult SdParser_Fail(SdErr code, SdToken_r token, const char* message) 
    SdStringBuf* buf = NULL;
    SdResult result = SdResult_SUCCESS;
    
-   assert(message);
+   SdAssert(message);
    buf = SdStringBuf_New();
    if (token) {
       SdStringBuf_AppendCStr(buf, "Line: ");
@@ -2610,7 +2612,7 @@ static SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, Sd
    SdStringBuf* buf = NULL;
    SdResult result = SdResult_SUCCESS;
 
-   assert(token);
+   SdAssert(token);
    buf = SdStringBuf_New();
    SdStringBuf_AppendCStr(buf, "Expected: ");
    SdStringBuf_AppendCStr(buf, SdParser_TypeString(expected_type));
@@ -2668,9 +2670,9 @@ SdResult SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* out_pro
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
    
-   assert(env);
-   assert(text);
-   assert(out_program_node);
+   SdAssert(env);
+   SdAssert(text);
+   SdAssert(out_program_node);
    scanner = SdScanner_New();
    functions = SdList_New();
    statements = SdList_New();
@@ -2711,8 +2713,8 @@ static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expecte
    SdToken_r token = NULL;
    SdTokenType actual_type = SdTokenType_NONE;
 
-   assert(scanner);
-   assert(out_token);
+   SdAssert(scanner);
+   SdAssert(out_token);
    if (!SdScanner_Read(scanner, &token))
       return SdParser_FailEof();
 
@@ -2728,7 +2730,7 @@ static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expecte
 static SdResult SdParser_ReadExpectEquals(SdScanner_r scanner) {
    SdToken_r token = NULL;
 
-   assert(scanner);
+   SdAssert(scanner);
    if (!SdScanner_Read(scanner, &token))
       return SdParser_FailEof();
 
@@ -2747,9 +2749,9 @@ static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue
    SdValue_r body = NULL;
    SdBool has_var_args = SdFalse;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    if (SdScanner_PeekType(scanner) == SdTokenType_IMPORT) {
       is_imported = SdTrue;
       SdParser_READ();
@@ -2806,9 +2808,9 @@ static SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
    SdResult result = SdResult_SUCCESS;
    SdList* statements = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACE);
 
    statements = SdList_New();
@@ -2831,9 +2833,9 @@ static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
    SdToken_r token = NULL;
    SdResult result = SdResult_SUCCESS;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    switch (SdScanner_PeekType(scanner)) {
       case SdTokenType_INT_LIT: {
          int num = 0;
@@ -2867,8 +2869,8 @@ static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
          SdParser_READ_EXPECT_TYPE(SdTokenType_STRING_LIT);
          str = SdStrdup(SdToken_Text(token));
          len = strlen(str);
-         assert(str[0] == '"');
-         assert(str[len - 1] == '"');
+         SdAssert(str[0] == '"');
+         SdAssert(str[len - 1] == '"');
          
          str[len - 1] = 0; /* remove trailing quote */
          inner_str = &str[1]; /* remove leading quote */
@@ -2915,9 +2917,9 @@ static SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_
    SdList* param_names = NULL;
    SdValue_r body = NULL, expr = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_LAMBDA);
 
    param_names = SdList_New();
@@ -2955,9 +2957,9 @@ end:
 }
 
 static SdResult SdParser_ParseStatement(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    switch (SdScanner_PeekType(scanner)) {
       case SdTokenType_OPEN_PAREN: return SdParser_ParseCall(env, scanner, out_node);
       case SdTokenType_OPEN_BRACKET: return SdParser_ParseCall(env, scanner, out_node);
@@ -2985,9 +2987,9 @@ static SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
    SdString* function_name = NULL;
    SdList* arguments = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    arguments = SdList_New();
    switch (SdScanner_PeekType(scanner)) {
       case SdTokenType_OPEN_PAREN: {
@@ -3041,9 +3043,9 @@ static SdResult SdParser_ParseVar(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
    SdValue_r expr = NULL;
    SdList* identifiers = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_VAR);
    
    if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_PAREN) { /* multiple list element assignment */
@@ -3083,9 +3085,9 @@ static SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
    SdValue_r expr = NULL;
    SdList* identifiers = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_SET);
    
    if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_PAREN) { /* multiple list element assignment */
@@ -3124,9 +3126,9 @@ static SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* ou
    SdValue_r condition_expr = NULL, true_body = NULL, else_body = NULL;
    SdList* elseifs = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_IF);
    SdParser_READ_EXPR(condition_expr);
    SdParser_READ_BODY(true_body);
@@ -3135,7 +3137,7 @@ static SdResult SdParser_ParseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r* ou
    while (SdScanner_PeekType(scanner) == SdTokenType_ELSEIF) {
       SdValue_r elseif = NULL;
       SdParser_CALL(SdParser_ParseElseIf(env, scanner, &elseif));
-      assert(elseif);
+      SdAssert(elseif);
       SdList_Append(elseifs, elseif);
    }
 
@@ -3158,9 +3160,9 @@ static SdResult SdParser_ParseElseIf(SdEnv_r env, SdScanner_r scanner, SdValue_r
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, body = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_ELSEIF);
    SdParser_READ_EXPR(expr);
    SdParser_READ_BODY(body);
@@ -3177,9 +3179,9 @@ static SdResult SdParser_ParseFor(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
    SdString* indexer_name = NULL;
    SdValue_r start_expr = NULL, stop_expr = NULL, body = NULL, collection_expr = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_FOR);
    SdParser_READ_IDENTIFIER(iter_name);
 
@@ -3225,9 +3227,9 @@ static SdResult SdParser_ParseWhile(SdEnv_r env, SdScanner_r scanner, SdValue_r*
    SdResult result = SdResult_SUCCESS;
    SdValue_r body = NULL, expr = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_WHILE);
    SdParser_READ_EXPR(expr);
    SdParser_READ_BODY(body);
@@ -3242,9 +3244,9 @@ static SdResult SdParser_ParseDo(SdEnv_r env, SdScanner_r scanner, SdValue_r* ou
    SdResult result = SdResult_SUCCESS;
    SdValue_r body = NULL, expr = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_DO);
    SdParser_READ_BODY(body);
    SdParser_READ_EXPECT_TYPE(SdTokenType_WHILE);
@@ -3261,9 +3263,9 @@ static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r
    SdValue_r condition_expr = NULL, default_body = NULL;
    SdList* cases = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_SWITCH);
    SdParser_READ_EXPR(condition_expr);
    SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_BRACE);
@@ -3272,7 +3274,7 @@ static SdResult SdParser_ParseSwitch(SdEnv_r env, SdScanner_r scanner, SdValue_r
    while (SdScanner_PeekType(scanner) == SdTokenType_CASE) {
       SdValue_r case_v = NULL;
       SdParser_CALL(SdParser_ParseCase(env, scanner, &case_v));
-      assert(case_v);
+      SdAssert(case_v);
       SdList_Append(cases, case_v);
    }
 
@@ -3297,9 +3299,9 @@ static SdResult SdParser_ParseCase(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, body = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_CASE);
    SdParser_READ_EXPR(expr);
    SdParser_READ_BODY(body);
@@ -3314,9 +3316,9 @@ static SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_RETURN);
    SdParser_READ_EXPR(expr);
    *out_node = SdAst_Return_New(env, expr);
@@ -3329,9 +3331,9 @@ static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL;
 
-   assert(env);
-   assert(scanner);
-   assert(out_node);
+   SdAssert(env);
+   SdAssert(scanner);
+   SdAssert(out_node);
    SdParser_READ_EXPECT_TYPE(SdTokenType_DIE);
    SdParser_READ_EXPR(expr);
    *out_node = SdAst_Die_New(env, expr);
@@ -3345,9 +3347,9 @@ end:
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL; \
       SdType a_type = SdType_NIL; \
-      assert(self); \
-      assert(arguments); \
-      assert(out_return); \
+      SdAssert(self); \
+      SdAssert(arguments); \
+      SdAssert(out_return); \
       *out_return = NULL; \
       if (SdFailed(result = SdEngine_Args1(arguments, &a_val, &a_type))) \
          return result;
@@ -3356,9 +3358,9 @@ end:
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL, b_val = NULL; \
       SdType a_type = SdType_NIL, b_type = SdType_NIL; \
-      assert(self); \
-      assert(arguments); \
-      assert(out_return); \
+      SdAssert(self); \
+      SdAssert(arguments); \
+      SdAssert(out_return); \
       *out_return = NULL; \
       if (SdFailed(result = SdEngine_Args2(arguments, &a_val, &a_type, &b_val, &b_type))) \
          return result;
@@ -3367,9 +3369,9 @@ end:
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL, b_val = NULL, c_val = NULL; \
       SdType a_type = SdType_NIL, b_type = SdType_NIL, c_type = SdType_NIL; \
-      assert(self); \
-      assert(arguments); \
-      assert(out_return); \
+      SdAssert(self); \
+      SdAssert(arguments); \
+      SdAssert(out_return); \
       *out_return = NULL; \
       if (SdFailed(result = SdEngine_Args3(arguments, &a_val, &a_type, &b_val, &b_type, &c_val, &c_type))) \
          return result;
@@ -3463,14 +3465,14 @@ end:
 SdEngine* SdEngine_New(SdEnv_r env) {
    SdEngine* self = NULL;
    
-   assert(env);
+   SdAssert(env);
    self = SdAlloc(sizeof(SdEngine));
    self->env = env;
    return self;
 }
 
 void SdEngine_Delete(SdEngine* self) {
-   assert(self);
+   SdAssert(self);
    SdFree(self);
 }
 
@@ -3480,7 +3482,7 @@ SdResult SdEngine_ExecuteProgram(SdEngine_r self) {
    SdList_r functions = NULL, statements = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
+   SdAssert(self);
    root = SdEnv_Root(self->env);
    functions = SdEnv_Root_Functions(root);
    statements = SdEnv_Root_Statements(root);
@@ -3521,12 +3523,12 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    SdBool has_var_args = SdFalse;
    size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(function_name);
-   assert(arguments);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(function_name);
+   SdAssert(arguments);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
 
    /* ensure that 'function_name' refers to a defined closure */
    closure_slot = SdEnv_FindVariableSlot(self->env, frame, function_name, SdTrue);
@@ -3632,11 +3634,11 @@ end:
 static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value) {
    SdResult result = SdResult_SUCCESS;
 
-   assert(self);
-   assert(frame);
-   assert(expr);
-   assert(out_value);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(expr);
+   SdAssert(out_value);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
 
    switch (SdAst_NodeType(expr)) {
       case SdNodeType_INT_LIT:
@@ -3683,12 +3685,12 @@ static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValu
    SdString_r identifier = NULL;
    SdValue_r slot = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(var_ref);
-   assert(out_value);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(var_ref) == SdNodeType_VAR_REF);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(var_ref);
+   SdAssert(out_value);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(var_ref) == SdNodeType_VAR_REF);
 
    identifier = SdAst_VarRef_Identifier(var_ref);
    slot = SdEnv_FindVariableSlot(self->env, frame, identifier, SdTrue);
@@ -3699,12 +3701,12 @@ static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValu
 }
 
 static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value) {
-   assert(self);
-   assert(frame);
-   assert(function);
-   assert(out_value);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(function) == SdNodeType_FUNCTION);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(function);
+   SdAssert(out_value);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(function) == SdNodeType_FUNCTION);
 
    *out_value = SdEnv_Closure_New(self->env, frame, SdAst_Function_ParameterNames(function), function,
       SdEnv_BoxList(self->env, SdList_New()));
@@ -3717,12 +3719,12 @@ static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r
    SdValue_r statement = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(body);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(body) == SdNodeType_BODY);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(body);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(body) == SdNodeType_BODY);
 
    statements = SdAst_Body_Statements(body);
    count = SdList_Count(statements);
@@ -3742,11 +3744,11 @@ static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdVa
    SdValue_r discarded_result = NULL;
    SdBool gc_needed = SdFalse;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
 
 #ifdef SD_DEBUG
    /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
@@ -3785,12 +3787,12 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
    SdList* argument_values = NULL;
    size_t i = 0, num_arguments = 0;
    
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_CALL);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_CALL);
 
    argument_exprs = SdAst_Call_Arguments(statement);
    argument_values = SdList_New();
@@ -3814,11 +3816,11 @@ static SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdResult result = SdResult_SUCCESS;
    SdValue_r name = NULL, expr = NULL, value = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_VAR);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_VAR);
 
    name = SdAst_Var_VariableName(statement);
    expr = SdAst_Var_ValueExpr(statement);
@@ -3834,11 +3836,11 @@ static SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdVal
    SdValue_r expr = NULL, list_value = NULL, element_value = NULL, name = NULL;
    size_t i = 0, names_count = 0, list_count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_MULTI_VAR);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_MULTI_VAR);
 
    names = SdAst_MultiVar_VariableNames(statement);
    expr = SdAst_MultiVar_ValueExpr(statement);
@@ -3866,11 +3868,11 @@ static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdString_r name = NULL;
    SdValue_r slot = NULL, expr = NULL, value = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_SET);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_SET);
 
    /* the variable slot must already exist */
    name = SdAst_Set_VariableName(statement);
@@ -3894,11 +3896,11 @@ static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdVal
    SdValue_r expr = NULL, list_value = NULL, element_value = NULL, slot = NULL, name = NULL;
    size_t i = 0, names_count = 0, list_count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_MULTI_SET);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_MULTI_SET);
 
    names = SdAst_MultiSet_VariableNames(statement);
    expr = SdAst_MultiSet_ValueExpr(statement);
@@ -3931,12 +3933,12 @@ static SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r s
    SdList_r elseifs = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_IF);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_IF);
 
    /* try the IF condition */
    expr = SdAst_If_ConditionExpr(statement);
@@ -3971,12 +3973,12 @@ static SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r 
       body = NULL, loop_frame = NULL;
    int i = 0, start = 0, stop = 0;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_FOR);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_FOR);
 
    iter_name = SdAst_For_VariableName(statement);
    start_expr = SdAst_For_StartExpr(statement);
@@ -4023,12 +4025,12 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
    SdList_r haystack = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_FOREACH);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_FOREACH);
 
    iter_name = SdAst_ForEach_IterName(statement);
    index_name = SdAst_ForEach_IndexName(statement);
@@ -4071,12 +4073,12 @@ static SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL, body = NULL, loop_frame = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_WHILE);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_WHILE);
 
    expr = SdAst_While_ConditionExpr(statement);
    body = SdAst_While_Body(statement);
@@ -4108,12 +4110,12 @@ static SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r s
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL, body = NULL, loop_frame = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_DO);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_DO);
 
    expr = SdAst_Do_ConditionExpr(statement);
    body = SdAst_Do_Body(statement);
@@ -4150,12 +4152,12 @@ static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue
    SdList_r cases = NULL;
    size_t i = 0, count = 0;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_SWITCH);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_SWITCH);
 
    expr = SdAst_Switch_Expr(statement);
    cases = SdAst_Switch_Cases(statement);
@@ -4187,12 +4189,12 @@ static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue
 }
 
 static SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(out_return);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_RETURN);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(out_return);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_RETURN);
 
    return SdEngine_EvaluateExpr(self, frame, SdAst_Return_Expr(statement), out_return);
 }
@@ -4201,11 +4203,11 @@ static SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdResult result = SdResult_SUCCESS;
    SdValue_r expr = NULL, value = NULL;
 
-   assert(self);
-   assert(frame);
-   assert(statement);
-   assert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-   assert(SdAst_NodeType(statement) == SdNodeType_DIE);
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(statement);
+   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(statement) == SdNodeType_DIE);
 
    expr = SdAst_Die_Expr(statement);
    if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &value)))
@@ -4219,10 +4221,10 @@ static SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r frame, SdValue_r 
 static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_r arguments, SdValue_r* out_return) {
    const char* cstr = NULL;
    
-   assert(self);
-   assert(name);
-   assert(arguments);
-   assert(out_return);
+   SdAssert(self);
+   SdAssert(name);
+   SdAssert(arguments);
+   SdAssert(out_return);
 
    cstr = SdString_CStr(name);
 
@@ -4344,9 +4346,9 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
 }
 
 static SdResult SdEngine_Args1(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type) {
-   assert(arguments);
-   assert(out_a);
-   assert(out_a_type);
+   SdAssert(arguments);
+   SdAssert(out_a);
+   SdAssert(out_a_type);
 
    if (SdList_Count(arguments) != 1)
       return SdFail(SdErr_ARGUMENT_MISMATCH, "Expected 1 argument.");
@@ -4357,11 +4359,11 @@ static SdResult SdEngine_Args1(SdList_r arguments, SdValue_r* out_a, SdType* out
 
 static SdResult SdEngine_Args2(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type, SdValue_r* out_b, 
    SdType* out_b_type) {
-   assert(arguments);
-   assert(out_a);
-   assert(out_a_type);
-   assert(out_b);
-   assert(out_b_type);
+   SdAssert(arguments);
+   SdAssert(out_a);
+   SdAssert(out_a_type);
+   SdAssert(out_b);
+   SdAssert(out_b_type);
 
    if (SdList_Count(arguments) != 2)
       return SdFail(SdErr_ARGUMENT_MISMATCH, "Expected 2 arguments.");
@@ -4374,13 +4376,13 @@ static SdResult SdEngine_Args2(SdList_r arguments, SdValue_r* out_a, SdType* out
 
 static SdResult SdEngine_Args3(SdList_r arguments, SdValue_r* out_a, SdType* out_a_type, SdValue_r* out_b, 
    SdType* out_b_type, SdValue_r* out_c, SdType* out_c_type) {
-   assert(arguments);
-   assert(out_a);
-   assert(out_a_type);
-   assert(out_b);
-   assert(out_b_type);
-   assert(out_c);
-   assert(out_c_type);
+   SdAssert(arguments);
+   SdAssert(out_a);
+   SdAssert(out_a_type);
+   SdAssert(out_b);
+   SdAssert(out_b_type);
+   SdAssert(out_c);
+   SdAssert(out_c_type);
 
    if (SdList_Count(arguments) != 3)
       return SdFail(SdErr_ARGUMENT_MISMATCH, "Expected 3 arguments.");
