@@ -2,6 +2,7 @@
 # Use one of the other makefiles to use other compilers. (make -f Makefile.ext)
 
 CC=gcc
+COMPILER=GCC
 CFLAGS=-ansi -pedantic -Wall -Wextra -Werror -O2 -x c
 LFLAGS=-lm
 SEP=/

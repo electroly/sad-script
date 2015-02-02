@@ -1,6 +1,7 @@
 # LCC-Win compiler
 
 CC=lc
+COMPILER=LCC-Win
 CFLAGS=-A -shadows -unused
 LFLAGS=
 SEP=\\

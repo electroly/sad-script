@@ -7,23 +7,25 @@ TESTRESULTS=$(TESTS:tests/%.sad=testresults/%.testresult)
 all: bin/sad bin/sad-test
 
 bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
-	$(CC) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_SOURCES)) $(SAD_OUT_FLAG)
+	@echo bin/sad \(using $(COMPILER)\)
+	@$(CC) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_SOURCES)) $(SAD_OUT_FLAG)
 	-@rm -f *.obj
 	-@rm -f *.o
 
 bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
-	$(CC) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG)
+	@echo bin/sad-test \(using $(COMPILER)\)
+	@$(CC) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG)
 	-@rm -f *.obj
 	-@rm -f *.o
 
 bin/prelude.sad: src/prelude.sad
-	cp src/prelude.sad bin/prelude.sad
+	@cp src/prelude.sad bin/prelude.sad
 
 bin:
-	mkdir bin
+	@mkdir bin
 
 testresults:
-	mkdir testresults
+	@mkdir testresults
 
 cleantests:
 	@rm -f testresults/*
@@ -34,7 +36,7 @@ clean: cleantests
 test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 
 $(TESTRESULTS): 
-	@echo $(@:testresults/%.testresult=%)
+	@echo $(@:testresults/%.testresult=tests/%.sad)
 	-@bin/sad --prelude bin$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err
 	@cat $@.err >> $@
 	@rm $@.err

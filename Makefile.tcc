@@ -1,6 +1,7 @@
 # TinyCC compiler
 
 CC=tcc
+COMPILER=TinyCC
 CFLAGS=
 LFLAGS=
 SEP=/

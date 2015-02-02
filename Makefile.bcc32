@@ -1,6 +1,7 @@
 # Borland C++ 5.5 compiler
 
 CC=bcc32
+COMPILER=Borland C++
 CFLAGS=-q -Q -w -w! -w-8004 -w-8073 -A -tWC -v -O2 -IC:/Borland/BCC55/Include -nbin
 LFLAGS=-LC:/Borland/BCC55/Lib
 SEP=/

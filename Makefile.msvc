@@ -1,6 +1,7 @@
 # Microsoft Visual C++ 2013 compiler
 
 CC=cmd /K msvc-cl.bat
+COMPILER=Visual C++
 CFLAGS=
 LFLAGS=
 SEP=/
