@@ -93,7 +93,7 @@ typedef enum SdErr_e {
 } SdErr;
 
 typedef enum SdType_e {
-   /* These numeric values are returned by (type-of) and must not change. */
+   /* These numeric values are used by (get-type) and must not change. */
    SdType_NIL = 0,
    SdType_INT = 1,
    SdType_DOUBLE = 2,
@@ -103,7 +103,10 @@ typedef enum SdType_e {
 
    /* these are really just lists, but with unique types to distinguish them from general purpose lists */
    SdType_FUNCTION = 6,
-   SdType_ERROR = 7
+   SdType_ERROR = 7,
+
+   /* this is really just an integer, but with a unique type to distinguish it from general purpose numbers */
+   SdType_TYPE = 8
 } SdType;
 
 typedef enum SdTokenType_e {
@@ -249,6 +252,7 @@ SdValue*       SdValue_NewString(SdString* x);
 SdValue*       SdValue_NewList(SdList* x);
 SdValue*       SdValue_NewFunction(SdList* x);
 SdValue*       SdValue_NewError(SdList* x);
+SdValue*       SdValue_NewType(SdType x);
 void           SdValue_Delete(SdValue* self);
 SdType         SdValue_Type(SdValue_r self);
 int            SdValue_GetInt(SdValue_r self);
@@ -321,6 +325,7 @@ SdValue_r      SdEnv_BoxString(SdEnv_r env, SdString* x);
 SdValue_r      SdEnv_BoxList(SdEnv_r env, SdList* x);
 SdValue_r      SdEnv_BoxFunction(SdEnv_r env, SdList* x);
 SdValue_r      SdEnv_BoxError(SdEnv_r env, SdList* x);
+SdValue_r      SdEnv_BoxType(SdEnv_r env, SdType x);
 
 SdValue_r      SdEnv_Root_New(SdEnv_r env);
 SdList_r       SdEnv_Root_Functions(SdValue_r self);

@@ -1,16 +1,58 @@
+//Function
+//Function
+//Function
+//Function
+//-
+//false
+//false
+//false
+//false
+//false
+//false
 //true
 //true
+//false
+//-
+//false
+//false
+//false
+//false
+//false
+//false
 //true
 //true
+//false
 
 function f1 () {}
-(println [(type-of f1) = TYPE-FUNCTION])
+(println (type-of f1))
 
 var f2 = \() {}
-(println [(type-of f2) = TYPE-FUNCTION])
+(println (type-of f2))
 
 var f3 = \x {}
-(println [(type-of f3) = TYPE-FUNCTION])
+(println (type-of f3))
 
 var f4 = \(x y) {}
-(println [(type-of f4) = TYPE-FUNCTION])
+(println (type-of f4))
+
+(println "-")
+(println [nil = Function])
+(println [5 = Function])
+(println [5.5 = Function])
+(println [true = Function])
+(println ["hello" = Function])
+(println [(list) = Function])
+(println [\x x = Function])
+(println [Function = Function])
+(println [Int = Function])
+
+(println "-")
+(println [Function = nil])
+(println [Function = 5])
+(println [Function = 5.5])
+(println [Function = true])
+(println [Function = "hello"])
+(println [Function = (list)])
+(println [Function = \x x])
+(println [Function = Function])
+(println [Function = Int])

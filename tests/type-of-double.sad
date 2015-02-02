@@ -1,18 +1,37 @@
-//2
-//2
-//2
-//2
-//2
-//2
+//Double
+//Double
+//Double
+//Double
+//Double
+//Double
 //1.100000
 //1.000000
 //0.100000
 //-1.100000
 //-1.000000
 //-0.100000
-//2
 //2.000000
 //3.000000
+//-
+//false
+//false
+//true
+//false
+//false
+//false
+//false
+//true
+//false
+//-
+//false
+//false
+//true
+//false
+//false
+//false
+//false
+//true
+//false
 
 (println (type-of 1.1))
 (println (type-of 1.))
@@ -26,8 +45,29 @@
 (println -1.1)
 (println -1.)
 (println -.1)
-(println TYPE-DOUBLE)
 var d = 2.0
 var e = [1.0 + d]
 (println d)
 (println e)
+
+(println "-")
+(println [nil = Double])
+(println [5 = Double])
+(println [5.5 = Double])
+(println [true = Double])
+(println ["hello" = Double])
+(println [(list) = Double])
+(println [\x x = Double])
+(println [Double = Double])
+(println [Int = Double])
+
+(println "-")
+(println [Double = nil])
+(println [Double = 5])
+(println [Double = 5.5])
+(println [Double = true])
+(println [Double = "hello"])
+(println [Double = (list)])
+(println [Double = \x x])
+(println [Double = Double])
+(println [Double = Int])

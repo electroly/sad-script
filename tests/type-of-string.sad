@@ -1,6 +1,48 @@
-//4
+//String
 //hello
+//-
+//false
+//false
+//false
+//false
+//true
+//false
+//false
+//true
+//false
+//-
+//false
+//false
+//false
+//false
+//true
+//false
+//false
+//true
+//false
 
 (println (type-of "hello"))
 var h = "hello"
 (println h)
+
+(println "-")
+(println [nil = String])
+(println [5 = String])
+(println [5.5 = String])
+(println [true = String])
+(println ["hello" = String])
+(println [(list) = String])
+(println [\x x = String])
+(println [String = String])
+(println [Int = String])
+
+(println "-")
+(println [String = nil])
+(println [String = 5])
+(println [String = 5.5])
+(println [String = true])
+(println [String = "hello"])
+(println [String = (list)])
+(println [String = \x x])
+(println [String = String])
+(println [String = Int])

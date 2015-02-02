@@ -3,9 +3,9 @@
 //true
 //1234
 
-(println [(type-of (error "asdf")) = TYPE-ERROR])
+(println [(type-of (error "asdf")) = Error])
 (println (error.message (error "asdf")))
 
 var a = [5 + (error "1234")]
-(println [(type-of a) = TYPE-ERROR])
+(println [(type-of a) = Error])
 (println (error.message a))

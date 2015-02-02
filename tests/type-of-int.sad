@@ -1,11 +1,51 @@
-//1
-//1
+//Int
 //2
 //3
+//-
+//false
+//true
+//false
+//false
+//false
+//false
+//false
+//true
+//false
+//-
+//false
+//true
+//false
+//false
+//false
+//false
+//false
+//true
+//false
 
 (println (type-of 1))
-(println TYPE-INT)
 var b = 2
 var c = [1 + b]
 (println b)
 (println c)
+
+(println "-")
+(println [nil = Int])
+(println [5 = Int])
+(println [5.5 = Int])
+(println [true = Int])
+(println ["hello" = Int])
+(println [(list) = Int])
+(println [\x x = Int])
+(println [Int = Int])
+(println [Double = Int])
+
+(println "-")
+(println [Int = nil])
+(println [Int = 5])
+(println [Int = 5.5])
+(println [Int = true])
+(println [Int = "hello"])
+(println [Int = (list)])
+(println [Int = \x x])
+(println [Int = Int])
+(println [Int = Double])

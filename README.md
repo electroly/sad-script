@@ -5,7 +5,7 @@ SAD-Script
 "S-Expressions and Dashes" or "Simple and Dumb"
 </p>
 
-A dynamically-typed, interpreted, garbage-collected language with 5 data types: int, double, bool, string, list.  There are no semicolons, and whitespace is insignificant.  Identifiers can contain anything except parentheses, braces, brackets, double quotes, and colons.  Identifiers must contain at least one character that isn't a digit and isn't a period, in order to distinguish identifiers from integer and double literals.
+A dynamically-typed, interpreted, garbage-collected language with 8 data types: Int, Double, Bool, String, List, Function, Error, and Type.  There are no semicolons, and whitespace is insignificant.  Identifiers can contain anything except parentheses, braces, brackets, double quotes, and colons.  Identifiers must contain at least one character that isn't a digit and isn't a period, in order to distinguish identifiers from integer and double literals.
 
 Control flow structures are JavaScript-like, with mandatory braces.  Function calls and expressions are Lisp-like, with parentheses around prefix-style function calls and brackets around infix-style function calls.  The two styles can be mixed and matched to taste.
 

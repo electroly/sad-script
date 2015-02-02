@@ -22,6 +22,7 @@ import function type-of (x)
 import function hash (x)
 import function to-string (x)
 import function print (x)
+import function get-type (code) // 0=Nil, 1=Int, 2=Double, 3=Bool, 4=String, 5=List, 6=Function, 7=Error, 8=Type
 
 // algebraic operators
 import function + (a b)
@@ -93,24 +94,25 @@ import function error.message (self)
 
 // Constants //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-var TYPE-NIL = 0
-var TYPE-INT = 1
-var TYPE-DOUBLE = 2
-var TYPE-BOOL = 3
-var TYPE-STRING = 4
-var TYPE-LIST = 5
-var TYPE-FUNCTION = 6
-var TYPE-ERROR = 7
+var Nil = (get-type 0)
+var Int = (get-type 1)
+var Double = (get-type 2)
+var Bool = (get-type 3)
+var String = (get-type 4)
+var List = (get-type 5)
+var Function = (get-type 6)
+var Error = (get-type 7)
+var Type = (get-type 8)
 
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 function list xs = xs
-function nil? (self) = [(type-of self) = TYPE-NIL]
+function nil? (self) = [self = Nil]
 function non-nil? (self) = (not (nil? self))
-function error? (self) = [(type-of self) = TYPE-ERROR]
-function zero? (self) = [[(type-of self) = TYPE-INT] and [self = 0]]
-function true? (self) = [[(type-of self) = TYPE-BOOL] and [self = true]]
-function false? (self) = [[(type-of self) = TYPE-BOOL] and [self = false]]
+function error? (self) = [self = Error]
+function zero? (self) = [self = 0]
+function true? (self) = [self = true]
+function false? (self) = [self = false]
 function printv (x) = (print (to-string x))
 function != (a b) = (not [a = b])
 
@@ -128,10 +130,10 @@ function += (collection item) = [collection list.append! item]
 
 function @ (self index) {
    switch (type-of self) {
-      case TYPE-STRING {
+      case String {
          return [self string.get-at index]
       }
-      case TYPE-LIST {
+      case List {
          return [self list.get-at index]
       }
       default {
@@ -146,10 +148,10 @@ function @= (self index value) {
 
 function length (self) {
    switch (type-of self) {
-      case TYPE-STRING {
+      case String {
          return [self string.length]
       }
-      case TYPE-LIST {
+      case List {
          return [self list.length]
       }
       default {
@@ -164,7 +166,7 @@ function pipe pipeline {
    var pipeline-length = (list.length pipeline)
    var value = nil
    for step in pipeline {
-      if [(type-of step) = TYPE-FUNCTION] {
+      if [(type-of step) = Function] {
          set value = (step value)
       } else {
          set value = step

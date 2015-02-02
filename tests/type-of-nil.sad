@@ -1,8 +1,48 @@
-//0
-//0
+//Nil
 //(nil)
+//-
+//true
+//false
+//false
+//false
+//false
+//false
+//false
+//true
+//false
+//-
+//true
+//false
+//false
+//false
+//false
+//false
+//false
+//true
+//false
 
 (println (type-of nil))
-(println TYPE-NIL)
 var a = nil
 (println a)
+
+(println "-")
+(println [nil = Nil])
+(println [5 = Nil])
+(println [5.5 = Nil])
+(println [true = Nil])
+(println ["hello" = Nil])
+(println [(list) = Nil])
+(println [\x x = Nil])
+(println [Nil = Nil])
+(println [Int = Nil])
+
+(println "-")
+(println [Nil = nil])
+(println [Nil = 5])
+(println [Nil = 5.5])
+(println [Nil = true])
+(println [Nil = "hello"])
+(println [Nil = (list)])
+(println [Nil = \x x])
+(println [Nil = Nil])
+(println [Nil = Int])

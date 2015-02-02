@@ -1,6 +1,26 @@
-//3
-//3
+//Bool
+//Bool
 //true
+//false
+//true
+//false
+//-
+//false
+//false
+//false
+//true
+//false
+//false
+//false
+//true
+//false
+//-
+//false
+//false
+//false
+//true
+//false
+//false
 //false
 //true
 //false
@@ -13,3 +33,25 @@ var f = true
 var g = (not f)
 (println f)
 (println g)
+
+(println "-")
+(println [nil = Bool])
+(println [5 = Bool])
+(println [5.5 = Bool])
+(println [true = Bool])
+(println ["hello" = Bool])
+(println [(list) = Bool])
+(println [\x x = Bool])
+(println [Bool = Bool])
+(println [Int = Bool])
+
+(println "-")
+(println [Bool = nil])
+(println [Bool = 5])
+(println [Bool = 5.5])
+(println [Bool = true])
+(println [Bool = "hello"])
+(println [Bool = (list)])
+(println [Bool = \x x])
+(println [Bool = Bool])
+(println [Bool = Int])

@@ -149,6 +149,7 @@ static char* SdStrdup(const char* src);
 static int SdMin(int a, int b);
 static void* SdUnreferenced(void* x);
 static void SdExit(const char* message);
+static const char* SdType_Name(SdType x);
 
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
@@ -262,6 +263,7 @@ static SdResult SdEngine_Intrinsic_StringGetAt(SdEngine_r self, SdList_r argumen
 static SdResult SdEngine_Intrinsic_Print(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_Error(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ErrorMessage(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_GetType(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -476,6 +478,21 @@ static void* SdUnreferenced(void* x) {
 static void SdExit(const char* message) {
    fprintf(stderr, "FATAL ERROR: %s\n", message);
    exit(-1);
+}
+
+static const char* SdType_Name(SdType x) {
+   switch (x) {
+      case SdType_NIL: return "Nil";
+      case SdType_INT: return "Int";
+      case SdType_DOUBLE: return "Double";
+      case SdType_BOOL: return "Bool";
+      case SdType_STRING: return "String";
+      case SdType_LIST: return "List";
+      case SdType_FUNCTION: return "Function";
+      case SdType_ERROR: return "Error";
+      case SdType_TYPE: return "Type";
+      default: SdAssert(SdFalse); return "unknown";
+   }
 }
 
 /* SdResult **********************************************************************************************************/
@@ -763,6 +780,12 @@ SdValue* SdValue_NewError(SdList* x) {
    return value;
 }
 
+SdValue* SdValue_NewType(SdType x) {
+   SdValue* value = SdValue_NewInt((int)x);
+   value->type = SdType_TYPE;
+   return value;
+}
+
 void SdValue_Delete(SdValue* self) {
    SdAssert(self);
    switch (SdValue_Type(self)) {
@@ -785,7 +808,7 @@ SdType SdValue_Type(SdValue_r self) {
 
 int SdValue_GetInt(SdValue_r self) {
    SdAssert(self);
-   SdAssert(SdValue_Type(self) == SdType_INT);
+   SdAssert(SdValue_Type(self) == SdType_INT || SdValue_Type(self) == SdType_TYPE);
    return self->payload.int_value;
 }
 
@@ -823,6 +846,16 @@ SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
    SdAssert(b);
    a_type = SdValue_Type(a);
    b_type = SdValue_Type(b);
+
+   /* If one of the values is a Type, then this acts like the "is" operator. */
+   if (a_type == SdType_TYPE && b_type != SdType_TYPE)
+      return (SdType)SdValue_GetInt(a) == b_type;
+   else if (a_type != SdType_TYPE && b_type == SdType_TYPE)
+      return a_type == (SdType)SdValue_GetInt(b);
+   else if (a_type == SdType_TYPE && b_type == SdType_TYPE)
+      return (SdType)SdValue_GetInt(a) == (SdType)SdValue_GetInt(b);
+
+   /* Otherwise the types have to match for them to be equal. */
    if (a_type != b_type)
       return SdFalse;
 
@@ -847,6 +880,7 @@ int SdValue_Hash(SdValue_r self) {
          break;
 
       case SdType_INT:
+      case SdType_TYPE:
          hash = SdValue_GetInt(self);
          break;
 
@@ -1479,6 +1513,11 @@ SdValue_r SdEnv_BoxError(SdEnv_r env, SdList* x) {
    SdAssert(env);
    SdAssert(x);
    return SdEnv_AddToGc(env, SdValue_NewError(x));
+}
+
+SdValue_r SdEnv_BoxType(SdEnv_r env, SdType x) {
+   SdAssert(env);
+   return SdEnv_AddToGc(env, SdValue_NewType(x));
 }
 
 SdValue_r SdEnv_Root_New(SdEnv_r env) {
@@ -4311,6 +4350,10 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
          INTRINSIC("floor", SdEngine_Intrinsic_Floor);
          break;
 
+      case 'g':
+         INTRINSIC("get-type", SdEngine_Intrinsic_GetType);
+         break;
+
       case 'h':
          INTRINSIC("hash", SdEngine_Intrinsic_Hash);
          break;
@@ -4446,7 +4489,7 @@ static SdResult SdEngine_Args3(SdList_r arguments, SdValue_r* out_a, SdType* out
 }
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_TypeOf)
-   *out_return = SdEnv_BoxInt(self->env, a_type);
+   *out_return = SdEnv_BoxType(self->env, a_type);
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Hash)
@@ -4478,6 +4521,15 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ToString)
          break;
       case SdType_LIST:
          *out_return = SdEnv_BoxString(self->env, SdString_FromCStr("(list)"));
+         break;
+      case SdType_FUNCTION:
+         *out_return = SdEnv_BoxString(self->env, SdString_FromCStr("(function)"));
+         break;
+      case SdType_ERROR:
+         *out_return = SdEnv_BoxString(self->env, SdString_FromCStr("(error)"));
+         break;
+      case SdType_TYPE:
+         *out_return = SdEnv_BoxString(self->env, SdString_FromCStr(SdType_Name(SdValue_GetInt(a_val))));
          break;
       default:
          return SdFail(SdErr_INTERPRETER_BUG, "Unexpected type.");
@@ -4663,5 +4715,12 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ErrorMessage)
    if (a_type == SdType_ERROR) {
       SdList_r error_list = SdValue_GetList(a_val);
       *out_return = SdList_GetAt(error_list, 0);
+   }
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_GetType)
+   SdUnreferenced(self);
+   if (a_type == SdType_INT) {
+      *out_return = SdEnv_BoxType(self->env, (SdType)SdValue_GetInt(a_val));
    }
 SdEngine_INTRINSIC_END

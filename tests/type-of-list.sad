@@ -1,13 +1,52 @@
-//3
-//a
-//b
+//List
 //4
 //4
+//-
+//false
+//false
+//false
+//false
+//false
+//true
+//false
+//true
+//false
+//-
+//false
+//false
+//false
+//false
+//false
+//true
+//false
+//true
+//false
 
-(println (list.length (list 1 2 3)))
+(println (type-of (list 1 2 3)))
+
 var x = (list 1 2 3)
-(println "a")
 (list.append! x 4)
-(println "b")
 (println (list.length x))
 (println [x @ 3])
+
+(println "-")
+(println [nil = List])
+(println [5 = List])
+(println [5.5 = List])
+(println [true = List])
+(println ["hello" = List])
+(println [(list) = List])
+(println [\x x = List])
+(println [List = List])
+(println [Int = List])
+
+(println "-")
+(println [List = nil])
+(println [List = 5])
+(println [List = 5.5])
+(println [List = true])
+(println [List = "hello"])
+(println [List = (list)])
+(println [List = \x x])
+(println [List = List])
+(println [List = Int])

@@ -1,0 +1,45 @@
+//Type
+//-
+//false
+//false
+//false
+//false
+//false
+//false
+//false
+//true
+//false
+//-
+//false
+//false
+//false
+//false
+//false
+//false
+//false
+//true
+//false
+
+(println (type-of Int))
+
+(println "-")
+(println [nil = Type])
+(println [5 = Type])
+(println [5.5 = Type])
+(println [true = Type])
+(println ["hello" = Type])
+(println [(list) = Type])
+(println [\x x = Type])
+(println [Type = Type])
+(println [Int = Type])
+
+(println "-")
+(println [Type = nil])
+(println [Type = 5])
+(println [Type = 5.5])
+(println [Type = true])
+(println [Type = "hello"])
+(println [Type = (list)])
+(println [Type = \x x])
+(println [Type = Type])
+(println [Type = Int])
