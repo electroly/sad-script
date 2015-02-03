@@ -1,0 +1,30 @@
+//Function
+//Function
+//1
+//2
+//3
+//4
+//(nil)
+//0
+//1
+//1
+//2
+//2
+//3
+//3
+//4
+
+var stream = [1 ... 4]
+(println (type-of stream))
+var iterator = (stream)
+(println (type-of iterator))
+(println (iterator))
+(println (iterator))
+(println (iterator))
+(println (iterator))
+(println (iterator))
+
+for x at i in stream {
+   (println i)
+   (println x)
+}

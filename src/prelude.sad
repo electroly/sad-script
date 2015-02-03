@@ -111,6 +111,7 @@ var Any = (get-type 9)
 
 function list xs = xs
 function nil? (self) = [self = Nil]
+function nil-or-error? (self) = [[self = Nil] or [self = Error]]
 function non-nil? (self) = (not (nil? self))
 function error? (self) = [self = Error]
 function zero? (self) = [self = 0]
@@ -149,13 +150,11 @@ function length (self) = match {
    default: (die! "Expected String or List.")
 }
 
-// Queries ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 function pipe pipeline {
    var pipeline-length = (list.length pipeline)
    var value = nil
    for step in pipeline {
-      if [(type-of step) = Function] {
+      if [step = Function] {
          set value = (step value)
       } else {
          set value = step
@@ -164,36 +163,153 @@ function pipe pipeline {
    return value
 }
 
-function reverse (xs) {
-   var new-list = (list)
-   var last-index = [(list.length xs) - 1]
-   for i from 0 to last-index {
-      [new-list += [xs @ [last-index - i]]]
-   }
-   return new-list
+// Streams ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A stream is like IEnumerable.
+// The stream is a function.  You call the stream and it returns an iterator.
+// The iterator is a function.  You call the iterator repeatedly and it returns a value, or nil.
+
+function to-stream (x) = match {
+   case List: (list.to-stream x)
+   case Function: x
+   default: (error "Invalid type.")
 }
 
-function filter (func xs) {
-   var new-list = (list)
-   for x in xs {
-      if (true? (func x)) {
-         [new-list += x]
+function list.to-stream (lst) = \() {
+   var i = 0
+   var n = (list.length lst)
+   return \() {
+      if [i < n] {
+         var item = [lst @ i]
+         set i = [i + 1]
+         return item
+      } else {
+         return nil
       }
    }
-   return new-list
 }
 
-function map (func xs) {
-   var new-list = (list)
-   for x in xs {
-      [new-list += (func x)]
+function to-list (xs) {
+   switch {
+      case List: {
+         return xs
+      }
+      case Function: {
+         var lst = (list)
+         for x in xs {
+            [lst += x]
+         }
+         return lst
+      }
+      default: {
+         die "Expected a list or stream."
+      }
    }
-   return new-list
 }
 
-function any? (xs) {
-   return [(count xs) > 0]
+function ... (low high) = \() {
+   var n = low
+   return \() {
+      if [n > high] {
+         return nil
+      } else {
+         var old-n = n
+         set n = [n + 1]
+         return old-n
+      }
+   }
 }
+
+function reverse (xs) {
+   var xs-list = [xs to-list]
+   return \() {
+      var i = [[xs-list list.length] - 1]
+      return \() {
+         if [i < 0] {
+            return nil
+         } else {
+            var old-i = i
+            set i = [i - 1]
+            return [xs-list @ old-i]
+         }
+      }
+   }
+}
+
+function where (predicate xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      return \() {
+         while true {
+            var value = (iterator)
+            if (nil-or-error? value) {
+               return value
+            } elseif (predicate value) {
+               return value
+            }
+         }
+      }
+   }
+}
+
+function select (selector xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      return \() {
+         var value = (iterator)
+         return match value {
+            case Nil: nil
+            case Error: value
+            default: (selector value)
+         }
+      }
+   }
+}
+
+function reduce (reducer xs) {
+   var stream = (to-stream xs)
+   var iterator = (stream)
+   var value = (iterator)
+   if (nil-or-error? value) {
+      return value
+   }
+   while true {
+      var new-value = (iterator)
+      switch new-value {
+         case Error: {
+            return new-value
+         }
+         case Nil: {
+            return value
+         }
+         default: {
+            set value = (reducer value new-value)
+         }
+      }
+   }
+}
+
+function first (xs) {
+   switch {
+      case String: {
+         return [xs @ 0]
+      }
+      case List: {
+         return [xs @ 0]
+      }
+      case Function: {
+         var iterator = (xs)
+         return (iterator)
+      }
+      default: {
+         return (argument-type-error "xs")
+      }
+   }
+}
+
+function any? (xs) = (nil? (first xs))
+function empty? (xs) = (non-nil? (first xs))
 
 // dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

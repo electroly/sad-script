@@ -307,7 +307,7 @@ SdResult       SdFile_ReadAllText(SdString_r file_path, SdString** out_text);
    Closure: -----------+------------------+----------------------+------------------------+----------------------------
       (list CLOSURE    | context:Frame    | param-names:Lst<Str> | function-node:Function | partial-arg-values:Lst<*>)
    CallTrace: ---------+------------------+----------------------+------------------------+----------------------------
-      (list CALL_TRACE | name:Str         | args:Lst<*>)         |                        |
+      (list CALL_TRACE | name:Str         | args:Lst<*>          | calling-frame:Frame)   |
 */
 SdEnv*         SdEnv_New(void);
 void           SdEnv_Delete(SdEnv* self);
@@ -320,7 +320,7 @@ SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r 
 unsigned long  SdEnv_AllocationCount(SdEnv_r self);
 SdValue_r      SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent);
 void           SdEnv_EndFrame(SdEnv_r self, SdValue_r frame);
-void           SdEnv_PushCall(SdEnv_r self, SdValue_r name, SdValue_r arguments);
+void           SdEnv_PushCall(SdEnv_r self, SdValue_r calling_frame, SdValue_r name, SdValue_r arguments);
 void           SdEnv_PopCall(SdEnv_r self);
 SdValue_r      SdEnv_GetCurrentCallTrace(SdEnv_r self); /* may be null */
 SdChain_r      SdEnv_GetCallTraceChain(SdEnv_r self);
@@ -357,9 +357,10 @@ SdValue_r      SdEnv_Closure_FunctionNode(SdValue_r self);
 SdValue_r      SdEnv_Closure_PartialArguments(SdValue_r self);
 SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments);
 
-SdValue_r      SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments);
+SdValue_r      SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments, SdValue_r calling_frame);
 SdValue_r      SdEnv_CallTrace_Name(SdValue_r self);
 SdValue_r      SdEnv_CallTrace_Arguments(SdValue_r self);
+SdValue_r      SdEnv_CallTrace_CallingFrame(SdValue_r self);
 
 /* SdAst **************************************************************************************************************
                0       |    1                    |    2                |    3          |    4          |    5

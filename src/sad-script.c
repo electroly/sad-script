@@ -192,6 +192,8 @@ static SdResult SdParser_ParseMatchCase(SdEnv_r env, SdScanner_r scanner, SdValu
 static SdResult SdParser_ParseReturn(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseDie(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 
+static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r closure, SdList_r arguments, 
+   SdValue_r* out_return);
 static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_r expr, SdValue_r* out_value);
 static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value);
 static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value);
@@ -286,7 +288,6 @@ static void SdAssertValue(SdValue_r x, SdType t) {
 }
 
 static void SdAssertNode(SdValue_r x, SdNodeType t) {
-   SdAssertValue(x, SdType_LIST);
    SdAssert(SdAst_NodeType(x) == t);
 }
 
@@ -330,7 +331,6 @@ static void SdAssertNonEmptyString(SdString_r x) {
 
 #ifdef SD_DEBUG
 void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
-   if (((unsigned int)ptr & 0xFFFF) == 0x3410) __debugbreak();
    if (!ptr) {
       SdExit("Allocation failure (SdDebugAllocCore)");
       return NULL;
@@ -1332,6 +1332,14 @@ void SdEnv_CollectGarbage(SdEnv_r self) {
          SdEnv_CollectGarbage_MarkConnectedValues(SdList_GetAt(active_frames_list, i));
    }
 
+   if (self->call_stack) {
+      value_node = SdChain_Head(self->call_stack);
+      while (value_node) {
+         SdEnv_CollectGarbage_MarkConnectedValues(SdChainNode_Value(value_node));
+         value_node = SdChainNode_Next(value_node);
+      }
+   }
+
    /* sweep unmarked values */
    value_node = SdChain_Head(self->values_chain);
    while (value_node) {
@@ -1360,7 +1368,9 @@ static void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root) {
       SdValue_r node = SdChain_Pop(stack);
       if (!SdValue_IsGcMarked(node)) {
          SdValue_SetGcMark(node, SdTrue);
-         if (SdValue_Type(node) == SdType_LIST) {
+         if (SdValue_Type(node) == SdType_LIST ||
+             SdValue_Type(node) == SdType_FUNCTION ||
+             SdValue_Type(node) == SdType_ERROR) {
             SdList_r list = NULL;
             size_t i = 0, count = 0;
 
@@ -1452,13 +1462,13 @@ void SdEnv_EndFrame(SdEnv_r self, SdValue_r frame) {
    }
 }
 
-void SdEnv_PushCall(SdEnv_r self, SdValue_r name, SdValue_r arguments) {
+void SdEnv_PushCall(SdEnv_r self, SdValue_r calling_frame, SdValue_r name, SdValue_r arguments) {
    SdAssert(self);
    SdAssert(name);
    SdAssertValue(name, SdType_STRING);
    SdAssertValue(arguments, SdType_LIST);
 
-   SdChain_Push(self->call_stack, SdEnv_CallTrace_New(self, name, arguments));
+   SdChain_Push(self->call_stack, SdEnv_CallTrace_New(self, name, arguments, calling_frame));
 }
 
 void SdEnv_PopCall(SdEnv_r self) {
@@ -1626,12 +1636,13 @@ static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t n
 
    SdAssert(env);
    SdAssert(values);
+   SdAssert(SdValue_Type(values[0]) == SdType_INT);
+
    node = SdList_New();
    for (i = 0; i < num_values; i++) {
       SdAssert(values[i]);
       SdList_Append(node, values[i]);
    }
-
    return SdEnv_BoxFunction(env, node);
 }
 
@@ -1784,8 +1795,8 @@ SdValue_r SdAst_ElseIf_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body
    SdAst_VALUE(body)
    SdAst_END
 }
-SdAst_VALUE_GETTER(SdAst_ElseIf_ConditionExpr, SdNodeType_IF, 1)
-SdAst_VALUE_GETTER(SdAst_ElseIf_Body, SdNodeType_IF, 2)
+SdAst_VALUE_GETTER(SdAst_ElseIf_ConditionExpr, SdNodeType_ELSEIF, 1)
+SdAst_VALUE_GETTER(SdAst_ElseIf_Body, SdNodeType_ELSEIF, 2)
 
 SdValue_r SdAst_For_New(SdEnv_r env, SdString* variable_name, SdValue_r start_expr, SdValue_r stop_expr,
    SdValue_r body) {
@@ -2091,19 +2102,22 @@ SdValue_r SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, Sd
       SdEnv_BoxList(env, partial_arguments));
 }
 
-SdValue_r SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments) {
+SdValue_r SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments, SdValue_r calling_frame) {
    SdAst_BEGIN(SdNodeType_CALL_TRACE)
 
    SdAssert(env);
    SdAssertValue(name, SdType_STRING);
    SdAssertValue(arguments, SdType_LIST);
+   SdAssertNode(calling_frame, SdNodeType_FRAME);
 
    SdAst_VALUE(name)
    SdAst_VALUE(arguments)
+   SdAst_VALUE(calling_frame)
    SdAst_END
 }
 SdAst_VALUE_GETTER(SdEnv_CallTrace_Name, SdNodeType_CALL_TRACE, 1)
 SdAst_VALUE_GETTER(SdEnv_CallTrace_Arguments, SdNodeType_CALL_TRACE, 2)
+SdAst_VALUE_GETTER(SdEnv_CallTrace_CallingFrame, SdNodeType_CALL_TRACE, 3)
 
 /* SdValueSet ********************************************************************************************************/
 SdValueSet* SdValueSet_New(void) {
@@ -3758,32 +3772,40 @@ SdResult SdEngine_ExecuteProgram(SdEngine_r self) {
 
 SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_name, SdList_r arguments, 
    SdValue_r* out_return) {
-   SdResult result = SdResult_SUCCESS;
-   SdValue_r closure_slot = NULL, closure = NULL, function = NULL, call_frame = NULL, total_arguments_value = NULL,
-      actual_function_name = NULL;
-   SdList_r param_names = NULL, partial_arguments = NULL, total_arguments = NULL;
-   SdBool has_var_args = SdFalse, in_call = SdFalse;
-   size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
+   SdValue_r closure_slot = NULL, closure = NULL;
 
    SdAssert(self);
-   SdAssert(frame);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(function_name);
    SdAssert(arguments);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
 
    /* ensure that 'function_name' refers to a defined closure */
    closure_slot = SdEnv_FindVariableSlot(self->env, frame, function_name, SdTrue);
-   if (!closure_slot) {
-      result = SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Function not found: ", function_name);
-      goto end;
-   }
+   if (!closure_slot)
+      return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Function not found: ", function_name);
 
    closure = SdEnv_VariableSlot_Value(closure_slot);
-   if (SdValue_Type(closure) != SdType_FUNCTION) {
-      result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
-      goto end;
-   }
+   if (SdValue_Type(closure) != SdType_FUNCTION)
+      return SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Not a function: ", function_name);
+
+   return SdEngine_CallClosure(self, frame, closure, arguments, out_return);
+}
+
+static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r closure, SdList_r arguments, 
+   SdValue_r* out_return) {
+   SdResult result = SdResult_SUCCESS;
+   SdValue_r function = NULL, call_frame = NULL, total_arguments_value = NULL, actual_function_name = NULL;
+   SdList_r param_names = NULL, partial_arguments = NULL, total_arguments = NULL;
+   SdBool has_var_args = SdFalse, in_call = SdFalse, gc_needed = SdFalse;
+   size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
+
+   SdAssert(self);
+   SdAssertNode(frame, SdNodeType_FRAME);
+   SdAssertValue(closure, SdType_FUNCTION);
+   SdAssert(arguments);
+   SdAssert(out_return);
+
    function = SdEnv_Closure_FunctionNode(closure);
    actual_function_name = SdAst_Function_Name(function);
       /* we may be calling through a closure stored in a variable with an arbitrary name, so grab the actual
@@ -3798,7 +3820,8 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
    param_names = SdValue_GetList(SdEnv_Closure_ParameterNames(closure));
    has_var_args = SdAst_Function_HasVariableLengthArgumentList(function);
    if (!SdAst_Function_IsImported(function) && !has_var_args && total_arguments_count > SdList_Count(param_names)) {
-      result = SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Too many arguments to function: ", function_name);
+      result = SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Too many arguments to function: ", 
+         SdValue_GetString(actual_function_name));
       goto end;
    }
 
@@ -3833,7 +3856,7 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
       SdList_Append(total_arguments, SdList_GetAt(arguments, i));
 
    /* push an entry in the call stack so that call traces work */
-   SdEnv_PushCall(self->env, actual_function_name, total_arguments_value);
+   SdEnv_PushCall(self->env, frame, actual_function_name, total_arguments_value);
    in_call = SdTrue;
 
    /* if this is an intrinsic then call it now; no frame needed */
@@ -3861,6 +3884,18 @@ SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_nam
       }
    }
 
+#ifdef SD_DEBUG
+   /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
+   gc_needed = SdTrue;
+#else
+   /* run the garbage collector if necessary (more than SD_NUM_ALLOCATIONS_PER_GC allocations since the last GC) */
+   gc_needed = (SdEnv_AllocationCount(self->env) - self->last_gc) > SD_NUM_ALLOCATIONS_PER_GC;
+#endif
+   if (gc_needed) {
+      SdEnv_CollectGarbage(self->env);
+      self->last_gc = SdEnv_AllocationCount(self->env);
+   }
+
    /* execute the function body using the frame we just constructed */
    result = SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
 
@@ -3881,7 +3916,7 @@ static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_
    SdAssert(frame);
    SdAssert(expr);
    SdAssert(out_value);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
 
    switch (SdAst_NodeType(expr)) {
       case SdNodeType_INT_LIT:
@@ -3936,7 +3971,7 @@ static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValu
    SdAssert(frame);
    SdAssert(var_ref);
    SdAssert(out_value);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(var_ref) == SdNodeType_VAR_REF);
 
    identifier = SdAst_VarRef_Identifier(var_ref);
@@ -3952,7 +3987,7 @@ static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdVa
    SdAssert(frame);
    SdAssert(function);
    SdAssert(out_value);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(function) == SdNodeType_FUNCTION);
 
    *out_value = SdEnv_Closure_New(self->env, frame, SdAst_Function_ParameterNames(function), function,
@@ -3972,7 +4007,7 @@ static SdResult SdEngine_EvaluateMatch(SdEngine_r self, SdValue_r frame, SdValue
    SdAssert(frame);
    SdAssert(match);
    SdAssert(out_value);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(match) == SdNodeType_MATCH);
 
    exprs = SdAst_Match_Exprs(match);
@@ -4059,7 +4094,7 @@ static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r
    SdAssert(frame);
    SdAssert(body);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(body) == SdNodeType_BODY);
 
    statements = SdAst_Body_Statements(body);
@@ -4078,26 +4113,12 @@ static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r
 
 static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdValue_r discarded_result = NULL;
-   SdBool gc_needed = SdFalse;
 
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
-
-#ifdef SD_DEBUG
-   /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
-   gc_needed = SdTrue;
-#else
-   /* run the garbage collector if necessary (more than SD_NUM_ALLOCATIONS_PER_GC allocations since the last GC) */
-   gc_needed = (SdEnv_AllocationCount(self->env) - self->last_gc) > SD_NUM_ALLOCATIONS_PER_GC;
-#endif
-
-   if (gc_needed) {
-      SdEnv_CollectGarbage(self->env);
-      self->last_gc = SdEnv_AllocationCount(self->env);
-   }
+   SdAssertNode(frame, SdNodeType_FRAME);
 
    switch (SdAst_NodeType(statement)) {
       case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, &discarded_result);
@@ -4127,7 +4148,7 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_CALL);
 
    argument_exprs = SdAst_Call_Arguments(statement);
@@ -4155,7 +4176,7 @@ static SdResult SdEngine_ExecuteVar(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_VAR);
 
    name = SdAst_Var_VariableName(statement);
@@ -4175,7 +4196,7 @@ static SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdVal
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_MULTI_VAR);
 
    names = SdAst_MultiVar_VariableNames(statement);
@@ -4207,7 +4228,7 @@ static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_SET);
 
    /* the variable slot must already exist */
@@ -4235,7 +4256,7 @@ static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdVal
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_MULTI_SET);
 
    names = SdAst_MultiSet_VariableNames(statement);
@@ -4273,7 +4294,7 @@ static SdResult SdEngine_ExecuteIf(SdEngine_r self, SdValue_r frame, SdValue_r s
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_IF);
 
    /* try the IF condition */
@@ -4313,7 +4334,7 @@ static SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_FOR);
 
    iter_name = SdAst_For_VariableName(statement);
@@ -4357,15 +4378,16 @@ end:
 static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r iter_name = NULL, index_name = NULL, haystack_expr = NULL, haystack_value = NULL, body = NULL, 
-      iter_value = NULL, loop_frame = NULL;
+      loop_frame = NULL;
    SdList_r haystack = NULL;
+   SdList* empty_list = NULL;
    size_t i = 0, count = 0;
 
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_FOREACH);
 
    iter_name = SdAst_ForEach_IterName(statement);
@@ -4376,31 +4398,71 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
    /* evaluate the IN expression */
    if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, haystack_expr, &haystack_value)))
       return result;
-   if (SdValue_Type(haystack_value) != SdType_LIST)
-      return SdFail(SdErr_TYPE_MISMATCH, "FOR...IN expression does not evaluate to a List.");
-   haystack = SdValue_GetList(haystack_value);
+   
+   if (SdValue_Type(haystack_value) == SdType_LIST) {
+      haystack = SdValue_GetList(haystack_value);
 
-   /* enumerate the list */
-   count = SdList_Count(haystack);
-   for (i = 0; i < count; i++) {
-      iter_value = SdList_GetAt(haystack, i);
-      loop_frame = SdEnv_BeginFrame(self->env, frame);
-      if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, iter_value)))
-         goto end;
-      if (SdValue_Type(index_name) != SdType_NIL) { /* user may not have specified an indexer variable */
-         if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
+      /* enumerate the list */
+      count = SdList_Count(haystack);
+      for (i = 0; i < count; i++) {
+         SdValue_r iter_value = NULL;
+
+         iter_value = SdList_GetAt(haystack, i);
+         loop_frame = SdEnv_BeginFrame(self->env, frame);
+         if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, iter_value)))
             goto end;
+         if (SdValue_Type(index_name) != SdType_NIL) { /* user may not have specified an indexer variable */
+            if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
+               goto end;
+         }
+         *out_return = NULL;
+         if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
+            goto end;
+         if (*out_return) /* a return statement inside the loop will break from the loop */
+            goto end;
+         SdEnv_EndFrame(self->env, loop_frame);
+         loop_frame = NULL;
       }
-      *out_return = NULL;
-      if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
+   } else if (SdValue_Type(haystack_value) == SdType_FUNCTION) { /* haystack_value is a stream */
+      SdValue_r stream_func = haystack_value, iterator_func = NULL;
+      empty_list = SdList_New();
+
+      /* call stream_func to get an iterator_func */
+      if (SdFailed(result = SdEngine_CallClosure(self, frame, stream_func, empty_list, &iterator_func)))
          goto end;
-      if (*out_return) /* a return statement inside the loop will break from the loop */
+      if (SdValue_Type(iterator_func) != SdType_FUNCTION) {
+         result = SdFail(SdErr_TYPE_MISMATCH, "FOREACH expected a list or stream.");
          goto end;
-      SdEnv_EndFrame(self->env, loop_frame);
-      loop_frame = NULL;
+      }
+
+      /* repeatedly call iterator_func to get values */
+      for (i = 0; SdTrue; i++) {
+         SdValue_r iter_value = NULL;
+
+         if (SdFailed(result = SdEngine_CallClosure(self, frame, iterator_func, empty_list, &iter_value)))
+            goto end;
+         if (SdValue_Type(iter_value) == SdType_NIL)
+            break;
+
+         loop_frame = SdEnv_BeginFrame(self->env, frame);
+         if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, iter_value)))
+            goto end;
+         if (SdValue_Type(index_name) != SdType_NIL) { /* user may not have specified an indexer variable */
+            if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
+               goto end;
+         }
+         *out_return = NULL;
+         if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
+            goto end;
+         if (*out_return) /* a return statement inside the loop will break from the loop */
+            goto end;
+         SdEnv_EndFrame(self->env, loop_frame);
+         loop_frame = NULL;
+      }
    }
 
 end:
+   if (empty_list) SdList_Delete(empty_list);
    if (loop_frame) SdEnv_EndFrame(self->env, loop_frame);
    return result;
 }
@@ -4413,7 +4475,7 @@ static SdResult SdEngine_ExecuteWhile(SdEngine_r self, SdValue_r frame, SdValue_
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_WHILE);
 
    expr = SdAst_While_ConditionExpr(statement);
@@ -4450,7 +4512,7 @@ static SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r s
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_DO);
 
    expr = SdAst_Do_ConditionExpr(statement);
@@ -4493,7 +4555,7 @@ static SdResult SdEngine_ExecuteSwitch(SdEngine_r self, SdValue_r frame, SdValue
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_SWITCH);
 
    exprs = SdAst_Switch_Exprs(statement);
@@ -4581,7 +4643,7 @@ static SdResult SdEngine_ExecuteReturn(SdEngine_r self, SdValue_r frame, SdValue
    SdAssert(frame);
    SdAssert(statement);
    SdAssert(out_return);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_RETURN);
 
    return SdEngine_EvaluateExpr(self, frame, SdAst_Return_Expr(statement), out_return);
@@ -4594,7 +4656,7 @@ static SdResult SdEngine_ExecuteDie(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdAssert(self);
    SdAssert(frame);
    SdAssert(statement);
-   SdAssert(SdAst_NodeType(frame) == SdNodeType_FRAME);
+   SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_DIE);
 
    expr = SdAst_Die_Expr(statement);
