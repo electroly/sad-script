@@ -86,10 +86,7 @@ typedef enum SdErr_e {
    SdErr_TYPE_MISMATCH,
    SdErr_ARGUMENT_MISMATCH,
    SdErr_ARGUMENT_OUT_OF_RANGE,
-   SdErr_CANNOT_OPEN_FILE,
-
-   SdErr_FIRST = SdErr_SUCCESS,
-   SdErr_LAST = SdErr_CANNOT_OPEN_FILE
+   SdErr_CANNOT_OPEN_FILE
 } SdErr;
 
 typedef enum SdType_e {

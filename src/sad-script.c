@@ -449,11 +449,8 @@ void* SdRealloc(void* ptr, size_t size) {
    new_ptr = realloc(ptr, size);
    /* If there is not enough available memory to expand the block to the given size, the original block is left 
       unchanged, and NULL is returned. */
-   if (!new_ptr) {
-      char buf[1000];
-      sprintf(buf, "realloc(%x, %u) failed (SdAlloc)", (unsigned int)ptr, (unsigned int)size);
-      SdExit(buf);
-   }
+   if (!new_ptr)
+      SdExit("realloc failed.");
 
    return new_ptr;
 }
@@ -507,7 +504,6 @@ SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
 SdResult SdFail(SdErr code, const char* message) {
    SdResult err;
 
-   SdAssert(code >= SdErr_FIRST && code <= SdErr_LAST);
    SdAssert(message);
    memset(&err, 0, sizeof(err));
    err.code = code;
@@ -520,7 +516,6 @@ SdResult SdFailWithStringSuffix(SdErr code, const char* message, SdString_r suff
    SdStringBuf* buf = NULL;
    SdResult result = SdResult_SUCCESS;
 
-   SdAssert(code >= SdErr_FIRST && code <= SdErr_LAST);
    SdAssert(message);
    SdAssert(suffix);
    buf = SdStringBuf_New();
