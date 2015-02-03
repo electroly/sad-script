@@ -8,6 +8,10 @@
 //(nil)
 //(nil)
 //(nil)
+//-
+//2
+//555
+//777
 
 var a = (dict)
 [a dict.set! "key1" 123]
@@ -24,3 +28,11 @@ var a = (dict)
 (println [a dict.get nil])
 (println [a dict.get (list 1)])
 
+(println "-")
+var b = (dict) // try using lists as keys
+[b dict.set! (list 1 2) 555]
+[b dict.set! (list 4 6 7) 666]
+[b dict.set! (list 4 6 7) 777]
+(println (length b))
+(println [b dict.get (list 1 2)])
+(println [b dict.get (list 4 6 7)])

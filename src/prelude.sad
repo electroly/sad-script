@@ -117,7 +117,7 @@ function list.append! (self value) {
    [self list.insert-at! index value]
 }
 
-function += (collection item) = [collection list.append! item]
+function += (self item) = [self list.append! item]
 
 function @ (self index) = match {
    case String Int: [self string.get-at index]
@@ -125,7 +125,7 @@ function @ (self index) = match {
    default: (die! "Expected (String Int) or (List Int).")
 }
 
-function @= (self index value) = [collection list.set-at! index value]
+function @= (self index value) = [self list.set-at! index value]
 
 function length (self) = match {
    case String: [self string.length]
