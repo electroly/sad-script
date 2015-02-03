@@ -26,19 +26,11 @@ import function to-string (x)
 import function print (x)
 import function get-type (code) // 0=Nil, 1=Int, 2=Double, 3=Bool, 4=String, 5=List, 6=Function, 7=Error, 8=Type
 
-// algebraic operators
 import function + (a b)
 import function - (a b)
 import function * (a b)
 import function / (a b)
 import function % (a b)
-
-// bitwise operators
-import function bitwise-and (a b)
-import function bitwise-or (a b)
-import function bitwise-xor (a b)
-
-// trigonometric functions
 import function sin (x)
 import function cos (x)
 import function tan (x)
@@ -46,51 +38,42 @@ import function asin (x)
 import function acos (x)
 import function atan (x)
 import function atan2 (y x)
-
-// hyperbolic functions
 import function sinh (x)
 import function cosh (x)
 import function tanh (x)
-
-// exponential and logarithmic functions
 import function exp (x)
 import function log (x)
 import function log10 (x)
-
-// power operators and functions
 import function ** (a b)
 import function sqrt (x)
-
-// rounding functions
 import function ceil (x)
 import function floor (x)
 
-// boolean operators (no short circuiting)
+import function bitwise-and (a b)
+import function bitwise-or (a b)
+import function bitwise-xor (a b)
+import function bitwise-shift-left (a b)
+import function bitwise-shift-right (a b)
+
+// note: no short circuiting
 import function and (a b)
 import function or (a b)
 import function not (x)
 
-// comparison operators
 import function = (a b)
-import function < (a b)
-import function <= (a b)
-import function > (a b)
-import function >= (a b)
-import function << (a b)
-import function >> (a b)
+import function int.< (a b)
+import function double.< (a b)
+import function string.< (a b)
 
-// list functions
 import function list.length (self) 
 import function list.get-at (self index) 
 import function list.set-at! (self index value) 
 import function list.insert-at! (self index value) 
 import function list.remove-at! (self index) 
 
-// string functions
 import function string.length (self) 
 import function string.get-at (self index) 
 
-// error functions
 import function error (message)
 import function error.message (self)
 
@@ -163,6 +146,133 @@ function pipe pipeline {
       set value = (step value)
    }
    return value
+}
+
+function compare (x y) {
+   if [x < y] {
+      return -1
+   } elseif [x > y] {
+      return 1
+   } else {
+      return 0
+   }
+}
+
+// returns (list is-exact index)
+function binary-search (key-selector-func search-key lst) {
+   return (binary-search-with-custom-comparator compare key-selector-func search-key lst)
+}
+
+// returns (list is-exact index)
+function binary-search-with-custom-comparator (compare-func key-selector-func search-key lst) {
+   var first = 0
+   var last = [(list.length lst) - 1]
+
+   while [first <= last] {
+      var pivot = [[first + last] / 2]
+      var pivot-key = (key-selector-func [lst @ pivot])
+      var compare = (compare-func pivot-key search-key)
+
+      if [compare < 0] { // pivot-key < search-key
+         set first = [pivot + 1]
+
+         if [first > last] { // pivot is the closest non-match less than search-key, but we want the next highest.
+            return (list false [pivot + 1])
+         }
+      } elseif [compare > 0] { // pivot-key > search-key
+         set last = [pivot - 1]
+
+         if [first > last] { // pivot is the closest non-match higher than search-key.
+            return (list false pivot)
+         }
+      } else { // pivot-key = search-key
+         return (list true pivot)
+      }
+   }
+
+   // the list is empty
+   return (list false 0)
+}
+
+function get-type-number (x) = match {
+   case Nil: 0
+   case Int: 1
+   case Double: 2
+   case Bool: 3
+   case String: 4
+   case List: 5
+   case Function: 6
+   case Error: 7
+   case Type: 8
+}
+
+function min xs {
+   var min-val = nil
+   for x in xs {
+      if (nil? min-val) {
+         set min-val = x
+      } elseif [x < min-val] {
+         set min-val = x
+      }
+   }
+   return min-val
+}
+
+function max xs {
+   var max-val = nil
+   for x in xs {
+      if (nil? max-val) {
+         set max-val = x
+      } elseif [x > max-val] {
+         set max-val = x
+      }
+   }
+   return max-val
+}
+
+function list.< (x y) {
+   var x-length = (length x)
+   var y-length = (length y)
+   var min-length = (min x-length y-length)
+   for i from 0 to [min-length - 1] {
+      if [[x @ i] < [y @ i]] {
+         return true
+      }
+   }
+   return [x-length < y-length]
+}
+
+function bool.< (x y) = match {
+   case false true: true
+   default: false
+}
+
+function < (x y) = match {
+   case Nil Nil: false
+   case Int Int: [x int.< y]
+   case Double Double: [x double.< y]
+   case Bool Bool: [x bool.< y]
+   case String String: [x string.< y]
+   case List List: [x list.< y]
+   case Function Any: (die! "Functions are not ordered.")
+   case Any Function: (die! "Functions are not ordered.")
+   case Error Any: (die! "Errors are not ordered.")
+   case Any Error: (die! "Errors are not ordered.")
+   case Type Any: (die! "Types are not ordered.")
+   case Any Type: (die! "Types are not ordered.")
+   default: [(get-type-number x) int.< (get-type-number y)]
+}
+
+function <= (x y) {
+   return [[x < y] or [x = y]]
+}
+
+function > (x y) {
+   return (not [[x < y] or [x = y]])
+}
+
+function >= (x y) {
+   return (not [x < y])
 }
 
 // Streams ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -407,77 +517,93 @@ function hashtable.remove! (self key) {
    return false
 }
 
-// hashset ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// A dict where all the values are ignored (but happen to be set to true)
+// dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A sorted association list: (list (list key-1 value-1) (list key-2 value-2) ...)
 
-function hashset () {
-   return (dict)
+function dict () = (list)
+function dict-pair (key value) = (list key value)
+var DICT-PAIR.KEY = 0
+var DICT-PAIR.VALUE = 1
+
+function dict.set! (self key value) {
+   var pair = (dict-pair key value)
+   var (exact index) = [self dict.pair-index key]
+   if exact {
+      [self @= index pair]
+   } else {
+      [self list.insert-at! index pair]
+   }
 }
 
-function hashset-add (self key) {
-   return [self dict.set! key true]
+function dict.get (self key) { // returns the value or nil
+   var (exact index) = [self dict.pair-index key]
+   if exact {
+      return [[self @ index] @ DICT-PAIR.VALUE]
+   } else {
+      return nil
+   }
 }
 
-function hashset-has? (self key) {
-   return (true? [self dict.get key])
+function dict.remove! (self key) { // returns true if the item was removed, false if it wasn't in the dict.
+   var (exact index) = [self dict.pair-index key]
+   if exact {
+      [self list.remove-at! index]
+   }
+   return exact
 }
 
-function hashset-remove (self key) {
-   [self dict.remove! key]
+function dict.pair-index (self key) { // returns (list exact index)
+   return (binary-search \x [x @ DICT-PAIR.KEY] key self)
 }
 
 // chain //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A doubly-linked list: (list head-node count)
 // Each node: (list value prev next)
 
-function chain () {
-   return (list nil 0)
-}
-var chain.HEAD = 0 // chain-node or nil
-var chain.COUNT = 1 // int
+function chain () = (list nil 0)
+var CHAIN.HEAD = 0 // chain-node or nil
+var CHAIN.COUNT = 1 // int
 
-function chain-node (value prev next) {
-   return (list value prev next)
-}
-var chain-node.VALUE = 0 // any
-var chain-node.PREV = 1 // chain-node or nil
-var chain-node.NEXT = 2 // chain-node or nil
+function chain-node (value prev next) = (list value prev next)
+var CHAIN-NODE.VALUE = 0 // any
+var CHAIN-NODE.PREV = 1 // chain-node or nil
+var CHAIN-NODE.NEXT = 2 // chain-node or nil
 
 function chain.push! (self value) {
-   var old-head = [self @ chain.HEAD]
+   var old-head = [self @ CHAIN.HEAD]
    var new-head = (chain-node value nil old-head)
-   [self @= chain.HEAD new-head]
+   [self @= CHAIN.HEAD new-head]
    if (non-nil? old-head) {
-      [old-head @= chain-node.PREV new-head]
+      [old-head @= CHAIN-NODE.PREV new-head]
    }
-   [self @= chain.COUNT [[self @ chain.COUNT] + 1]]
+   [self @= CHAIN.COUNT [[self @ CHAIN.COUNT] + 1]]
 }
 
 function chain.pop! (self) {
-   var old-head = [self @ chain.HEAD]
+   var old-head = [self @ CHAIN.HEAD]
    if (nil? old-head) {
       return nil
    } else {
-      var new-head = [head @ chain-node.NEXT]
-      [self @= chain.HEAD new-head]
+      var new-head = [head @ CHAIN-NODE.NEXT]
+      [self @= CHAIN.HEAD new-head]
       if (non-nil? new-head) {
-         [new-head @= chain-node.PREV nil]
+         [new-head @= CHAIN-NODE.PREV nil]
       }
-      [self @= chain.COUNT [[self @ chain.COUNT] - 1]]
-      return [old-head @ chain-node.VALUE]
+      [self @= CHAIN.COUNT [[self @ CHAIN.COUNT] - 1]]
+      return [old-head @ CHAIN-NODE.VALUE]
    }
 }
 
 function chain.remove! (self node) {
-   var prev = [node @ chain-node.PREV]
-   var next = [node @ chain-node.NEXT]
+   var prev = [node @ CHAIN-NODE.PREV]
+   var next = [node @ CHAIN-NODE.NEXT]
    if (nil? prev) { // this is the head node
-      [self @= chain.HEAD next]
+      [self @= CHAIN.HEAD next]
    } else { // this is a middle or tail node
       [prev @= chain.NEXT node]
    }
    if (non-nil? next) {
       [next @= chain.PREV prev]
    }
-   [self @= chain.COUNT [[self @ chain.COUNT] - 1]]
+   [self @= CHAIN.COUNT [[self @ CHAIN.COUNT] - 1]]
 }

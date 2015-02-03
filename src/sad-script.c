@@ -87,7 +87,7 @@ struct SdString_s {
 
 struct SdStringBuf_s {
    char* str;
-   int len;
+   size_t len;
 };
 
 struct SdValue_s {
@@ -151,7 +151,6 @@ struct SdEngine_s {
 };
 
 static char* SdStrdup(const char* src);
-static int SdMin(int a, int b);
 static void* SdUnreferenced(void* x);
 static void SdExit(const char* message);
 static const char* SdType_Name(SdType x);
@@ -257,10 +256,6 @@ static SdResult SdEngine_Intrinsic_And(SdEngine_r self, SdList_r arguments, SdVa
 static SdResult SdEngine_Intrinsic_Or(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_Not(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_Equals(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
-static SdResult SdEngine_Intrinsic_LessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
-static SdResult SdEngine_Intrinsic_LessThanEquals(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
-static SdResult SdEngine_Intrinsic_GreaterThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
-static SdResult SdEngine_Intrinsic_GreaterThanEquals(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ShiftLeft(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ShiftRight(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ListLength(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
@@ -274,6 +269,9 @@ static SdResult SdEngine_Intrinsic_Print(SdEngine_r self, SdList_r arguments, Sd
 static SdResult SdEngine_Intrinsic_Error(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_ErrorMessage(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_GetType(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_IntLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_DoubleLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_StringLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -378,12 +376,7 @@ static char* SdStrdup(const char* src) {
    return dst;
 }
 
-static int SdMin(int a, int b) {
-   if (a < b)
-      return a;
-   else
-      return b;
-}
+#define SdMin(a,b) ((a)<(b)?(a):(b))
 
 static void* SdUnreferenced(void* x) {
    return x;
@@ -568,7 +561,7 @@ void SdStringBuf_AppendString(SdStringBuf_r self, SdString_r suffix) {
 }
 
 void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
-   int old_len = 0, suffix_len = 0, new_len = 0;
+   size_t old_len = 0, suffix_len = 0, new_len = 0;
 
    SdAssert(self);
    SdAssert(suffix);
@@ -584,7 +577,7 @@ void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
 }
 
 void SdStringBuf_AppendChar(SdStringBuf_r self, char ch) {
-   int old_len = 0, new_len = 0;
+   size_t old_len = 0, new_len = 0;
 
    SdAssert(self);
    SdAssert(ch != 0);
@@ -618,7 +611,7 @@ void SdStringBuf_Clear(SdStringBuf_r self) {
    self->len = 0;
 }
 
-int SdStringBuf_Length(SdStringBuf_r self) {
+size_t SdStringBuf_Length(SdStringBuf_r self) {
    SdAssert(self);
    return self->len;
 }
@@ -881,7 +874,7 @@ void SdList_Delete(SdList* self) {
 }
 
 void SdList_Append(SdList_r self, SdValue_r item) {
-   int new_count = 0;
+   size_t new_count = 0;
    
    SdAssert(self);
    SdAssert(item);
@@ -906,7 +899,7 @@ void SdList_InsertAt(SdList_r self, size_t index, SdValue_r item) {
    if (index == self->count) {
       SdList_Append(self, item);
    } else {
-      int new_count = self->count + 1;
+      size_t new_count = self->count + 1;
       self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r));
       SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
       memmove(&self->values[index + 1], &self->values[index], sizeof(SdValue_r) * (self->count - index));
@@ -950,12 +943,12 @@ void SdList_Clear(SdList_r self) {
 
 SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context) {
    SdSearchResult result = { 0, SdFalse };
-   int first = 0;
-   int last = SdList_Count(list) - 1;
+   int first = 0, last = 0;
 
    SdAssert(list);
    SdAssert(compare_func);
    SdAssert(context);
+   last = (int)SdList_Count(list) - 1;
    while (first <= last) {
       int pivot = (first + last) / 2;
       int compare = compare_func(SdList_GetAt(list, pivot), context);
@@ -3587,25 +3580,6 @@ end:
       *out_return = SdEnv_BoxInt(self->env, expr); \
    } \
    SdEngine_INTRINSIC_END
-#define SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(name, int_double_expr, string_expr) \
-   SdEngine_INTRINSIC_START_ARGS2(name) \
-   if (a_type == SdType_DOUBLE && b_type == SdType_DOUBLE) { \
-      double a, b; \
-      a = SdValue_GetDouble(a_val); \
-      b = SdValue_GetDouble(b_val); \
-      *out_return = SdEnv_BoxBool(self->env, int_double_expr); \
-   } else if (a_type == SdType_INT && b_type == SdType_INT) { \
-      int a, b; \
-      a = SdValue_GetInt(a_val); \
-      b = SdValue_GetInt(b_val); \
-      *out_return = SdEnv_BoxBool(self->env, int_double_expr); \
-   } else if (a_type == SdType_STRING && b_type == SdType_STRING) { \
-      SdString_r a, b; \
-      a = SdValue_GetString(a_val); \
-      b = SdValue_GetString(b_val); \
-      *out_return = SdEnv_BoxBool(self->env, string_expr); \
-   } \
-   SdEngine_INTRINSIC_END
 #define SdEngine_INTRINSIC_DOUBLE1(name, expr) \
    SdEngine_INTRINSIC_START_ARGS1(name) \
    if (a_type == SdType_DOUBLE) { \
@@ -4289,7 +4263,7 @@ static SdResult SdEngine_ExecuteFor(SdEngine_r self, SdValue_r frame, SdValue_r 
    /* execute the body in a new frame for each iteration */
    for (i = start; i <= stop; i++) {
       loop_frame = SdEnv_BeginFrame(self->env, frame);
-      if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, SdEnv_BoxInt(self->env, i))))
+      if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, SdEnv_BoxInt(self->env, (int)i))))
          goto end;
       *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteBody(self, loop_frame, body, out_return)))
@@ -4342,7 +4316,7 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
          if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, iter_value)))
             goto end;
          if (SdValue_Type(index_name) != SdType_NIL) { /* user may not have specified an indexer variable */
-            if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
+            if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, (int)i))))
                goto end;
          }
          *out_return = NULL;
@@ -4384,7 +4358,7 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
          if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, iter_name, iter_value)))
             goto end;
          if (SdValue_Type(index_name) != SdType_NIL) { /* user may not have specified an indexer variable */
-            if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, i))))
+            if (SdFailed(result = SdEnv_DeclareVar(self->env, loop_frame, index_name, SdEnv_BoxInt(self->env, (int)i))))
                goto end;
          }
          *out_return = NULL;
@@ -4631,12 +4605,18 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
          INTRINSIC("bitwise-and", SdEngine_Intrinsic_BitwiseAnd);
          INTRINSIC("bitwise-or", SdEngine_Intrinsic_BitwiseOr);
          INTRINSIC("bitwise-xor", SdEngine_Intrinsic_BitwiseXor);
+         INTRINSIC("bitwise-shift-left", SdEngine_Intrinsic_ShiftLeft);
+         INTRINSIC("bitwise-shift-right", SdEngine_Intrinsic_ShiftRight);
          break;
 
       case 'c':
          INTRINSIC("ceil", SdEngine_Intrinsic_Ceil);
          INTRINSIC("cos", SdEngine_Intrinsic_Cos);
          INTRINSIC("cosh", SdEngine_Intrinsic_CosH);
+         break;
+
+      case 'd':
+         INTRINSIC("double.<", SdEngine_Intrinsic_DoubleLessThan);
          break;
 
       case 'e':
@@ -4655,6 +4635,10 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
 
       case 'h':
          INTRINSIC("hash", SdEngine_Intrinsic_Hash);
+         break;
+
+      case 'i':
+         INTRINSIC("int.<", SdEngine_Intrinsic_IntLessThan);
          break;
 
       case 'l':
@@ -4685,6 +4669,7 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
          INTRINSIC("sqrt", SdEngine_Intrinsic_Sqrt);
          INTRINSIC("string.length", SdEngine_Intrinsic_StringLength);
          INTRINSIC("string.get-at", SdEngine_Intrinsic_StringGetAt);
+         INTRINSIC("string.<", SdEngine_Intrinsic_StringLessThan);
          break;
 
       case 't':
@@ -4717,18 +4702,6 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
 
       case '=':
          INTRINSIC("=", SdEngine_Intrinsic_Equals);
-         break;
-
-      case '<':
-         INTRINSIC("<", SdEngine_Intrinsic_LessThan);
-         INTRINSIC("<=", SdEngine_Intrinsic_LessThanEquals);
-         INTRINSIC("<<", SdEngine_Intrinsic_ShiftLeft);
-         break;
-
-      case '>':
-         INTRINSIC(">", SdEngine_Intrinsic_GreaterThan);
-         INTRINSIC(">=", SdEngine_Intrinsic_GreaterThanEquals);
-         INTRINSIC(">>", SdEngine_Intrinsic_ShiftRight);
          break;
    }
    
@@ -4905,20 +4878,12 @@ SdEngine_INTRINSIC_BOOL2(SdEngine_Intrinsic_And, a && b)
 SdEngine_INTRINSIC_BOOL2(SdEngine_Intrinsic_Or, a || b)
 SdEngine_INTRINSIC_BOOL1(SdEngine_Intrinsic_Not, !a)
 SdEngine_INTRINSIC_VALUE2(SdEngine_Intrinsic_Equals, SdEnv_BoxBool(self->env, SdValue_Equals(a, b)))
-SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_LessThan, a < b, 
-   strcmp(SdString_CStr(a), SdString_CStr(b)) < 0)
-SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_LessThanEquals, a <= b, 
-   strcmp(SdString_CStr(a), SdString_CStr(b)) <= 0)
-SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_GreaterThan, a > b, 
-   strcmp(SdString_CStr(a), SdString_CStr(b)) > 0)
-SdEngine_INTRINSIC_INTDOUBLESTRING2_BOOL(SdEngine_Intrinsic_GreaterThanEquals, a >= b, 
-   strcmp(SdString_CStr(a), SdString_CStr(b)) >= 0)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftLeft, a << b)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftRight, a >> b)
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ListLength)
    if (a_type == SdType_LIST) {
-      *out_return = SdEnv_BoxInt(self->env, SdList_Count(SdValue_GetList(a_val)));
+      *out_return = SdEnv_BoxInt(self->env, (int)SdList_Count(SdValue_GetList(a_val)));
    }
 SdEngine_INTRINSIC_END
 
@@ -4973,7 +4938,7 @@ SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_StringLength)
    if (a_type == SdType_STRING) {
-      *out_return = SdEnv_BoxInt(self->env, SdString_Length(SdValue_GetString(a_val)));
+      *out_return = SdEnv_BoxInt(self->env, (int)SdString_Length(SdValue_GetString(a_val)));
    }
 SdEngine_INTRINSIC_END
 
@@ -5022,4 +4987,22 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_GetType)
    if (a_type == SdType_INT) {
       *out_return = SdEnv_BoxType(self->env, (SdType)SdValue_GetInt(a_val));
    }
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_IntLessThan)
+   if (a_type != SdType_INT || b_type != SdType_INT)
+      return SdFail(SdErr_TYPE_MISMATCH, "Arguments must be integers.");
+   *out_return = SdEnv_BoxBool(self->env, SdValue_GetInt(a_val) < SdValue_GetInt(b_val));
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_DoubleLessThan)
+   if (a_type != SdType_DOUBLE || b_type != SdType_DOUBLE)
+      return SdFail(SdErr_TYPE_MISMATCH, "Arguments must be doubles.");
+   *out_return = SdEnv_BoxBool(self->env, SdValue_GetDouble(a_val) < SdValue_GetDouble(b_val));
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringLessThan)
+   if (a_type != SdType_STRING || b_type != SdType_STRING)
+      return SdFail(SdErr_TYPE_MISMATCH, "Arguments must be strings.");
+   *out_return = SdEnv_BoxBool(self->env, SdString_Compare(SdValue_GetString(a_val), SdValue_GetString(b_val)) < 0);
 SdEngine_INTRINSIC_END

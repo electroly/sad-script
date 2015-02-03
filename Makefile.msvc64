@@ -1,0 +1,11 @@
+# Microsoft Visual C++ 2013 compiler (targeting AMD64)
+
+CC=cmd /K msvc-cl64.bat
+COMPILER=Visual C++ 64-bit
+CFLAGS=
+LFLAGS=
+SEP=/
+SAD_OUT_FLAG=-Febin/sad
+SAD_TEST_OUT_FLAG=-Febin/sad-test
+
+include Makefile.base

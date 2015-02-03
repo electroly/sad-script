@@ -207,7 +207,7 @@ struct SdResult_s {
 };
 
 struct SdSearchResult_s {
-   int index; /* could be one past the end of the list if search name > everything */
+   size_t index; /* could be one past the end of the list if search name > everything */
    SdBool exact; /* true = index is an exact match, false = index is the next highest match */
 };
 
@@ -246,7 +246,7 @@ void           SdStringBuf_AppendChar(SdStringBuf_r self, char ch);
 void           SdStringBuf_AppendInt(SdStringBuf_r self, int number);
 const char*    SdStringBuf_CStr(SdStringBuf_r self);
 void           SdStringBuf_Clear(SdStringBuf_r self);
-int            SdStringBuf_Length(SdStringBuf_r self);
+size_t         SdStringBuf_Length(SdStringBuf_r self);
 
 /* SdValue ***********************************************************************************************************/
 SdValue*       SdValue_NewNil(void);

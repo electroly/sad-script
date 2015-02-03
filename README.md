@@ -57,4 +57,4 @@ Supported compilers:
 - Borland C++ 5.5 (`bcc32`)
 - Open Watcom (`owcc`).  
 
-It has been tested in Windows 7, OS X 10.9, and Debian Linux 7.7.  It should work on any other platform supporting ANSI C.  The interpreter can be embedded in client applications simply by including `sad-script.c` and `sad-script.h` file in the project.  No need to link a library or anything difficult.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.
+It has been tested in Windows 7, OS X 10.9, and Debian Linux 7.7.  Both 32-bit and 64-bit builds are supported.  It should work on any other platform supporting ANSI C.  The interpreter can be embedded in client applications simply by including `sad-script.c` and `sad-script.h` file in the project.  No need to link a library or anything difficult.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.

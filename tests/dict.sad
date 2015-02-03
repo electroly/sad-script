@@ -1,0 +1,26 @@
+//3
+//123
+//true
+//blah
+//(nil)
+//(nil)
+//(nil)
+//(nil)
+//(nil)
+//(nil)
+
+var a = (dict)
+[a dict.set! "key1" 123]
+[a dict.set! "key2" true]
+[a dict.set! "key3" "blah"]
+(println (length a))
+(println [a dict.get "key1"])
+(println [a dict.get "key2"])
+(println [a dict.get "key3"])
+(println [a dict.get "key4"])
+(println [a dict.get 5])
+(println [a dict.get true])
+(println [a dict.get 5.5])
+(println [a dict.get nil])
+(println [a dict.get (list 1)])
+
