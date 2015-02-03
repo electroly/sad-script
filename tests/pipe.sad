@@ -14,6 +14,12 @@
 //-
 //8
 //9
+//-
+//45
+//11
+//91
+//51
+//6
 
 function print-list (lst) {
    for x in lst {
@@ -25,8 +31,8 @@ var a = (list 1 2 3 4)
 (print-list a)
 
 (println "-")
-(print-list (pipe a (where \x [[x % 2] = 0]) reverse))
-(print-list (pipe a (where \x [[x % 2] = 1]) reverse (skip 1) reverse))
+(print-list (pipe a (filter \x [[x % 2] = 0]) reverse))
+(print-list (pipe a (filter \x [[x % 2] = 1]) reverse (skip 1) reverse))
 
 (println "-")
 (print-list [1 ... 4])
@@ -34,3 +40,7 @@ var a = (list 1 2 3 4)
 (println "-")
 var b = [1 ... 100]
 (print-list (pipe b (skip 7) (take 2)))
+
+(println "-")
+var c = (list (list "d" 11) (list "a" 6) (list "e" 45) (list "b" 51) (list "c" 91))
+(print-list (pipe c (sort \x [x @ 0]) reverse (map \x [x @ 1])))

@@ -275,6 +275,14 @@ function >= (x y) {
    return (not [x < y])
 }
 
+function abs (x) {
+   if [x < 0] {
+      return [-1 * x]
+   } else {
+      return x
+   }
+}
+
 // Streams ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A stream is like IEnumerable.
 // The stream is a function.  You call the stream and it returns an iterator.
@@ -374,7 +382,7 @@ function take (n xs) {
    }
 }
 
-function where (predicate xs) {
+function filter (predicate xs) {
    var stream = (to-stream xs)
    return \() {
       var iterator = (stream)
@@ -391,7 +399,7 @@ function where (predicate xs) {
    }
 }
 
-function select (selector xs) {
+function map (selector xs) {
    var stream = (to-stream xs)
    return \() {
       var iterator = (stream)
@@ -432,23 +440,118 @@ function reduce (reducer xs) {
 function first (xs) {
    switch {
       case String: {
-         return [xs @ 0]
+         if [(string.length xs) > 0] {
+            return [xs @ 0]
+         } else {
+            return nil
+         }
       }
       case List: {
-         return [xs @ 0]
+         if [(list.length xs) > 0] {
+            return [xs @ 0]
+         } else {
+            return nil
+         }
       }
       case Function: {
          var iterator = (xs)
          return (iterator)
       }
       default: {
-         return (argument-type-error "xs")
+         die "Expected a string, list, or function."
       }
    }
 }
 
+function last (xs) {
+   switch {
+      case String: {
+         if [(string.length xs) > 0] {
+         return [xs @ [(string.length xs) - 1]]
+         } else {
+            return nil
+         }
+      }
+      case List: {
+         if [(list.length xs) > 0] {
+         return [xs @ [(list.length xs) - 1]]
+         } else {
+            return nil
+         }
+      }
+      case Function: {
+         var iterator = (xs)
+         var last-value = nil
+         while true {
+            var next-value = (iterator)
+            if (nil? next-value) {
+               return last-value
+            } else {
+               set last-value = next-value
+            }
+         }
+      }
+      default: {
+         die "Expected a string, list, or function."
+      }
+   }
+}
+
+function length-less-than? (n xs) {
+   switch xs {
+      case String: {
+         return [(string.length xs) < n]
+      }
+      case List: {
+         return [(list.length xs) < n]
+      }
+      case Function: {
+         var iterator = (xs)
+         for i from 1 to [n - 1] {
+            (iterator)
+         }
+         return (nil? (iterator))
+      }
+      default: {
+         die "Expected a string, list, or function."
+      }
+   }
+}
+
+function concat seqs {
+   var streams = (pipe seqs (map to-stream) to-list)
+   var num_streams = (list.length seqs)
+   return \() {
+      var iterators = (pipe streams (map \x (x)) to-list)
+      var which_stream = 0
+      return \() {
+         while [which_stream < num_streams] {
+            var iterator = [iterators @ which_stream]
+            var value = (iterator)
+            if (nil? value) {
+               set which_stream = [which_stream + 1]
+            } else {
+               return value
+            }
+         }
+      }
+   }
+}
+
+function sort (key-selector-func xs) {
+   if (length-less-than? 2 xs) {
+      return xs
+   } else {
+      var pivot-key = (key-selector-func (first xs))
+      var left = (sort key-selector-func (filter \x [(key-selector-func x) < pivot-key] xs))
+      var middle = (filter \x [(key-selector-func x) = pivot-key] xs)
+      var right = (sort key-selector-func (filter \x [(key-selector-func x) > pivot-key] xs))
+      return (concat left middle right)
+   }
+}
+
 function any? (xs) = (nil? (first xs))
-function empty? (xs) = (non-nil? (first xs))
+function none? (xs) = (non-nil? (first xs))
 
 // hashtable //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A list of buckets, where the index into the list equals [hash % number-of-buckets]

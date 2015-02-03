@@ -1380,6 +1380,7 @@ void SdEnv_PopCall(SdEnv_r self) {
    
    SdAssert(self);
    popped = SdChain_Pop(self->call_stack);
+   SdUnreferenced(popped);
    SdAssert(popped);
 }
 
@@ -1394,9 +1395,9 @@ void SdEnv_PopProtectedValue(SdEnv_r self) {
    
    SdAssert(self);
    popped = SdChain_Pop(self->protected_values);
+   SdUnreferenced(popped);
    SdAssert(popped);
 }
-
 
 SdValue_r SdEnv_GetCurrentCallTrace(SdEnv_r self) {
    SdChainNode_r node;
