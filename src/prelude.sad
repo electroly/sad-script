@@ -152,13 +152,15 @@ function length (self) = match {
 
 function pipe pipeline {
    var pipeline-length = (list.length pipeline)
-   var value = nil
-   for step in pipeline {
-      if [step = Function] {
-         set value = (step value)
-      } else {
-         set value = step
-      }
+
+   if (zero? pipeline-length) {
+      return nil
+   }
+
+   var value = [pipeline @ 0]
+   for i from 1 to [pipeline-length - 1] {
+      var step = [pipeline @ i]
+      set value = (step value)
    }
    return value
 }
@@ -166,7 +168,7 @@ function pipe pipeline {
 // Streams ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A stream is like IEnumerable.
 // The stream is a function.  You call the stream and it returns an iterator.
-// The iterator is a function.  You call the iterator repeatedly and it returns a value, or nil.
+// The iterator is a function.  You call the iterator repeatedly and it returns a value, or nil to signal the end.
 
 function to-stream (x) = match {
    case List: (list.to-stream x)
@@ -230,6 +232,33 @@ function reverse (xs) {
             var old-i = i
             set i = [i - 1]
             return [xs-list @ old-i]
+         }
+      }
+   }
+}
+
+function skip (n xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      for i from 1 to n {
+         (iterator)
+      }
+      return iterator
+   }
+}
+
+function take (n xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      var num-so-far = 0
+      return \() {
+         if [num-so-far < n] {
+            set num-so-far = [num-so-far + 1]
+            return (iterator)
+         } else {
+            return nil
          }
       }
    }
@@ -311,26 +340,24 @@ function first (xs) {
 function any? (xs) = (nil? (first xs))
 function empty? (xs) = (non-nil? (first xs))
 
-// dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Structure:
+// hashtable //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A list of buckets, where the index into the list equals [hash % number-of-buckets]
 // Each bucket is a list of pairs.
 // Each pair is a two-element list: (list key value)
 
-var DICT-BUCKET-COUNT = 37
+var HASHTABLE-BUCKET-COUNT = 37
 
-function dict () {
+function hashtable () {
    var x = (list)
-   for i from 1 to DICT-BUCKET-COUNT {
+   for i from 1 to HASHTABLE-BUCKET-COUNT {
       [x += nil]
    }
    return x
 }
 
-// returns nil if the key does not exist in the dict.
-function dict.get (self key) {
-   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
+// returns nil if the key does not exist in the hashtable.
+function hashtable.get (self key) {
+   var bucket-index = [(hash key) % HASHTABLE-BUCKET-COUNT]
    var bucket = [self @ bucket-index]
    if [bucket nil?] {
       return nil
@@ -346,9 +373,9 @@ function dict.get (self key) {
 }
 
 // returns true if a value was overwritten, false if not.
-function dict.set! (self key value) {
+function hashtable.set! (self key value) {
    var new-pair = (list key value)
-   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
+   var bucket-index = [(hash key) % HASHTABLE-BUCKET-COUNT]
    var bucket = [self @ bucket-index]
    if [bucket nil?] {
       set bucket = (list new-pair)
@@ -366,8 +393,8 @@ function dict.set! (self key value) {
    return false
 }
 
-function dict.remove! (self key) {
-   var bucket-index = [(hash key) % DICT-BUCKET-COUNT]
+function hashtable.remove! (self key) {
+   var bucket-index = [(hash key) % HASHTABLE-BUCKET-COUNT]
    var bucket = [self @ bucket-index]
    if (not [bucket nil?]) {
       for pair at i in bucket {
@@ -381,8 +408,6 @@ function dict.remove! (self key) {
 }
 
 // hashset ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Structure: 
 // A dict where all the values are ignored (but happen to be set to true)
 
 function hashset () {
@@ -402,8 +427,6 @@ function hashset-remove (self key) {
 }
 
 // chain //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Structure:
 // A doubly-linked list: (list head-node count)
 // Each node: (list value prev next)
 

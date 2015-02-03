@@ -6,7 +6,14 @@
 //4
 //2
 //1
+//-
+//1
+//2
 //3
+//4
+//-
+//8
+//9
 
 function print-list (lst) {
    for x in lst {
@@ -16,7 +23,14 @@ function print-list (lst) {
 
 var a = (list 1 2 3 4)
 (print-list a)
-(println "-")
 
+(println "-")
 (print-list (pipe a (where \x [[x % 2] = 0]) reverse))
-(print-list (pipe a (where \x [[x % 2] = 1]) reverse reverse))
+(print-list (pipe a (where \x [[x % 2] = 1]) reverse (skip 1) reverse))
+
+(println "-")
+(print-list [1 ... 4])
+
+(println "-")
+var b = [1 ... 100]
+(print-list (pipe b (skip 7) (take 2)))

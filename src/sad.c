@@ -18,14 +18,14 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-/* define SD_DEBUG for non-portable Visual C++ debugging (very slow) */
+/* see sad-script.c for debugging options */
 
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS 1
 #pragma warning(push, 0) /* ignore warnings in system headers */
 #endif
 
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_MSVC)
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
    const char* prelude = NULL;
    const char* file_path_cstr = NULL;
    
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_MSVC)
    /* dump memory leaks when the program exits */
    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif

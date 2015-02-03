@@ -18,7 +18,12 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
  * USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-/* define SD_DEBUG for non-portable Visual C++ debugging (very slow) */
+/* Debugging options:
+   define SD_DEBUG_ALL to enable all debugging code (requires Visual C++). this implies all the flags below:
+   define SD_DEBUG_GC to run the garbage collector at every opportunity, catch double-boxing.
+   define SD_DEBUG_MSVC to enable non-portable Visual C++ memory leak detection.
+   define NDEBUG to disable assertions. 
+*/
 
 #ifdef __cplusplus
 #error sad-script.c must be compiled as C language, not C++.
@@ -29,7 +34,7 @@
 #pragma warning(push, 0) /* ignore warnings in system headers */
 #endif
 
-#ifdef SD_DEBUG
+#ifdef SD_DEBUG_ALL
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
@@ -75,7 +80,7 @@ struct Sad_s {
 struct SdString_s {
    char* buffer; /* includes null terminator */
    size_t length; /* not including null terminator */
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdBool is_boxed; /* whether this string has been boxed already */
 #endif
 };
@@ -94,7 +99,7 @@ struct SdValue_s {
 struct SdList_s {
    SdValue_r* values;
    size_t count;
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdBool is_boxed; /* whether this list has been boxed already */
 #endif
 };
@@ -330,100 +335,6 @@ static void SdAssertNonEmptyString(SdString_r x) {
 }
 #endif
 
-#ifdef SD_DEBUG
-void* SdDebugAllocCore(void* ptr, size_t size, int line, const char* s, const char* func) {
-   if (!ptr) {
-      SdExit("Allocation failure (SdDebugAllocCore)");
-      return NULL;
-   }
-   memset(ptr, 0, size);
-   /*printf("%x ALLOC -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
-   (void)line;
-   (void)s;
-   (void)func;
-   return ptr;
-}
-
-#define SdDebugAlloc(size, line, s, func) SdDebugAllocCore(malloc(size), size, line, s, func)
-
-void SdDebugFree(void* ptr, int line, const char* s, const char* func) {
-   /*printf("%x FREE -- %s -- Line %d -- %s\n", (unsigned int)ptr, s, line, func);*/
-   (void)line;
-   (void)s;
-   (void)func;
-   free(ptr);
-}
-#define SdAlloc(size) SdDebugAlloc(size, __LINE__, #size, __FUNCTION__)
-#define SdFree(ptr) SdDebugFree(ptr, __LINE__, #ptr, __FUNCTION__)
-
-static void SdDebugDumpValueCore(SdValue_r value, int indent, SdValueSet_r seen) {
-   char* indent_str = NULL;
-
-   indent_str = malloc(indent + 1);
-   memset(indent_str, ' ', indent);
-   indent_str[indent] = 0;
-
-   if (SdValueSet_Has(seen, value)) {
-      printf("%s(%x) seen already\n", indent_str, (unsigned int)value);
-      free(indent_str);
-      return;
-   } else {
-      SdValueSet_Add(seen, value);
-   }
-
-   switch (SdValue_Type(value)) {
-      case SdType_NIL:
-         printf("%s(%x) nil\n", indent_str, (unsigned int)value);
-         break;
-      case SdType_INT:
-         printf("%s(%x) %d\n", indent_str, (unsigned int)value, SdValue_GetInt(value));
-         break;
-      case SdType_DOUBLE:
-         printf("%s(%x) %f\n", indent_str, (unsigned int)value, SdValue_GetDouble(value));
-         break;
-      case SdType_BOOL:
-         printf("%s(%x) %s\n", indent_str, (unsigned int)value, SdValue_GetBool(value) ? "true" : "false");
-         break;
-      case SdType_STRING: {
-         SdString_r str = NULL;
-         const char* cstr = NULL;
-         str = SdValue_GetString(value);
-         cstr = SdString_CStr(str);
-         printf("%s(%x,Str:%x,CStr:%x) \"%s\"\n", indent_str, (unsigned int)value, (unsigned int)str, 
-            (unsigned int)cstr, cstr);
-         break;
-      }
-      case SdType_LIST: {
-         SdList_r list = NULL;
-         size_t i = 0, count = 0;
-         list = SdValue_GetList(value);
-         count = SdList_Count(list);
-         printf("%s(%x,Lst:%x) list * %d\n", indent_str, (unsigned int)value, (unsigned int)list, count);
-         for (i = 0; i < count; i++)
-            SdDebugDumpValueCore(SdList_GetAt(list, i), indent + 2, seen);
-         break;
-      }
-   }
-
-   free(indent_str);
-}
-
-static void SdDebugDumpValue(SdValue_r value) {
-   SdValueSet* seen = SdValueSet_New();
-   printf("DUMP:\n");
-   SdDebugDumpValueCore(value, 3, seen);
-   SdValueSet_Delete(seen);
-}
-
-static void SdDebugDumpChain(SdChain_r chain) {
-   SdChainNode_r node = SdChain_Head(chain);
-   printf("CHAIN DUMP:\n");
-   while (node) {
-      printf("   (%x) Type %d\n", (unsigned int)SdChainNode_Value(node), SdValue_Type(SdChainNode_Value(node)));
-      node = SdChainNode_Next(node);
-   }
-}
-#else /* SD_DEBUG */
 void* SdAlloc(size_t size) {
    void* ptr = NULL;
 
@@ -438,8 +349,8 @@ void* SdAlloc(size_t size) {
    }
    return ptr;
 }
+
 #define SdFree(ptr) free((ptr))
-#endif
 
 void* SdRealloc(void* ptr, size_t size) {
    void* new_ptr = NULL;
@@ -746,7 +657,7 @@ SdValue* SdValue_NewString(SdString* x) {
    value->type = SdType_STRING;
    value->payload.string_value = x;
 
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdAssert(!x->is_boxed);
    x->is_boxed = SdTrue;
 #endif
@@ -762,7 +673,7 @@ SdValue* SdValue_NewList(SdList* x) {
    value->type = SdType_LIST;
    value->payload.list_value = x;
 
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdAssert(!x->is_boxed);
    x->is_boxed = SdTrue;
 #endif
@@ -1205,9 +1116,8 @@ static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
    return SdList_InsertBySearch(list, item, SdEnv_BinarySearchByName_CompareFunc, item_name);
 }
 
-#ifdef SD_DEBUG
-SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char* func) {
-   /*printf("%x BOX -- Type %d -- Line %d -- %s\n", (unsigned int)value, SdValue_Type(value), line, func);*/
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
+SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
    SdAssert(self);
    SdAssert(value);
 
@@ -1216,7 +1126,7 @@ SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char*
       SdChainNode_r node = SdChain_Head(self->values_chain);
       while (node) {
          if (SdChainNode_Value(node) == value) {
-            __debugbreak(); /* don't attempt to add a value twice! */
+            SdAssert(SdFalse); /* don't attempt to add a value twice! */
          }
          node = SdChainNode_Next(node);
       }
@@ -1226,7 +1136,6 @@ SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char*
    self->allocation_count++;
    return value;
 }
-#define SdEnv_AddToGc(self, value) SdEnv_DebugAddToGc(self, value, __LINE__, __FUNCTION__);
 #else
 SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
    SdAssert(self);
@@ -1250,10 +1159,6 @@ SdEnv* SdEnv_New(void) {
 
 void SdEnv_Delete(SdEnv* self) {
    SdAssert(self);
-#ifdef SD_DEBUG
-   SdDebugDumpValue(self->root);
-   SdDebugDumpChain(self->values_chain);
-#endif
    /* Allow the garbage collector to clean up the tree starting at root. */
    self->root = NULL;
    SdValueSet_Delete(self->active_frames);
@@ -3905,7 +3810,7 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
       }
    }
 
-#ifdef SD_DEBUG
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
    gc_needed = SdTrue;
 #else
@@ -4163,7 +4068,7 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
    SdResult result = SdResult_SUCCESS;
    SdList_r argument_exprs = NULL;
    SdList* argument_values = NULL;
-   size_t i = 0, num_arguments = 0;
+   size_t i = 0, num_arguments = 0, num_protected_values = 0;
    
    SdAssert(self);
    SdAssert(frame);
@@ -4181,11 +4086,15 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
       argument_expr = SdList_GetAt(argument_exprs, i);
       if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, argument_expr, &argument_value)))
          goto end;
+      SdEnv_PushProtectedValue(self->env, argument_value);
+      num_protected_values++;
       SdList_Append(argument_values, argument_value);
    }
 
    result = SdEngine_Call(self, frame, SdAst_Call_FunctionName(statement), argument_values, out_return);
 end:
+   while (num_protected_values-- > 0)
+      SdEnv_PopProtectedValue(self->env);
    if (argument_values) SdList_Delete(argument_values);
    return result;
 }
