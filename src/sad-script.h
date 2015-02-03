@@ -319,6 +319,8 @@ SdValue_r      SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent);
 void           SdEnv_EndFrame(SdEnv_r self, SdValue_r frame);
 void           SdEnv_PushCall(SdEnv_r self, SdValue_r calling_frame, SdValue_r name, SdValue_r arguments);
 void           SdEnv_PopCall(SdEnv_r self);
+void           SdEnv_PushProtectedValue(SdEnv_r self, SdValue_r value);
+void           SdEnv_PopProtectedValue(SdEnv_r self);
 SdValue_r      SdEnv_GetCurrentCallTrace(SdEnv_r self); /* may be null */
 SdChain_r      SdEnv_GetCallTraceChain(SdEnv_r self);
 

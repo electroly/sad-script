@@ -105,6 +105,7 @@ struct SdEnv_s {
    SdValueSet* active_frames; /* contains all currently active frames in the interpreter engine */
    unsigned long allocation_count;
    SdChain* call_stack; /* information about each call in the call stack */
+   SdChain* protected_values; /* internal interpreter values that we don't want to get GC'd right this moment */
 };
 
 struct SdValueSet_s {
@@ -1206,7 +1207,7 @@ static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item) {
 
 #ifdef SD_DEBUG
 SdValue_r SdEnv_DebugAddToGc(SdEnv_r self, SdValue* value, int line, const char* func) {
-   printf("%x BOX -- Type %d -- Line %d -- %s\n", (unsigned int)value, SdValue_Type(value), line, func);
+   /*printf("%x BOX -- Type %d -- Line %d -- %s\n", (unsigned int)value, SdValue_Type(value), line, func);*/
    SdAssert(self);
    SdAssert(value);
 
@@ -1243,6 +1244,7 @@ SdEnv* SdEnv_New(void) {
    env->root = SdEnv_Root_New(env);
    env->active_frames = SdValueSet_New();
    env->call_stack = SdChain_New();
+   env->protected_values = SdChain_New();
    return env;
 }
 
@@ -1260,6 +1262,7 @@ void SdEnv_Delete(SdEnv* self) {
    SdAssert(SdChain_Count(self->values_chain) == 0); /* shouldn't be anything left */
    SdChain_Delete(self->values_chain);
    SdChain_Delete(self->call_stack);
+   SdChain_Delete(self->protected_values);
    SdFree(self);
 }
 
@@ -1329,6 +1332,14 @@ void SdEnv_CollectGarbage(SdEnv_r self) {
 
    if (self->call_stack) {
       value_node = SdChain_Head(self->call_stack);
+      while (value_node) {
+         SdEnv_CollectGarbage_MarkConnectedValues(SdChainNode_Value(value_node));
+         value_node = SdChainNode_Next(value_node);
+      }
+   }
+
+   if (self->protected_values) {
+      value_node = SdChain_Head(self->protected_values);
       while (value_node) {
          SdEnv_CollectGarbage_MarkConnectedValues(SdChainNode_Value(value_node));
          value_node = SdChainNode_Next(value_node);
@@ -1473,6 +1484,21 @@ void SdEnv_PopCall(SdEnv_r self) {
    popped = SdChain_Pop(self->call_stack);
    SdAssert(popped);
 }
+
+void SdEnv_PushProtectedValue(SdEnv_r self, SdValue_r value) {
+   SdAssert(self);
+   SdAssert(value);
+   SdChain_Push(self->protected_values, value);
+}
+
+void SdEnv_PopProtectedValue(SdEnv_r self) {
+   SdValue_r popped = NULL;
+   
+   SdAssert(self);
+   popped = SdChain_Pop(self->protected_values);
+   SdAssert(popped);
+}
+
 
 SdValue_r SdEnv_GetCurrentCallTrace(SdEnv_r self) {
    SdChainNode_r node;
@@ -4376,7 +4402,7 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
       loop_frame = NULL;
    SdList_r haystack = NULL;
    SdList* empty_list = NULL;
-   size_t i = 0, count = 0;
+   size_t i = 0, count = 0, num_protected_values = 0;
 
    SdAssert(self);
    SdAssert(frame);
@@ -4422,6 +4448,9 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
       SdValue_r stream_func = haystack_value, iterator_func = NULL;
       empty_list = SdList_New();
 
+      SdEnv_PushProtectedValue(self->env, stream_func);
+      num_protected_values++;
+
       /* call stream_func to get an iterator_func */
       if (SdFailed(result = SdEngine_CallClosure(self, frame, stream_func, empty_list, &iterator_func)))
          goto end;
@@ -4429,6 +4458,9 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
          result = SdFail(SdErr_TYPE_MISMATCH, "FOREACH expected a list or stream.");
          goto end;
       }
+
+      SdEnv_PushProtectedValue(self->env, iterator_func);
+      num_protected_values++;
 
       /* repeatedly call iterator_func to get values */
       for (i = 0; SdTrue; i++) {
@@ -4457,6 +4489,8 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
    }
 
 end:
+   while (num_protected_values-- > 0)
+      SdEnv_PopProtectedValue(self->env);
    if (empty_list) SdList_Delete(empty_list);
    if (loop_frame) SdEnv_EndFrame(self->env, loop_frame);
    return result;
