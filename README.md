@@ -2,7 +2,7 @@ Sad-Script
 ----------
 
 <p align="center">
-<a href="http://electroly.com/sad/try#b8edde764ff206b6bb56aa0cb92b4277"><b>Try it now in your browser!</b></a>
+<a href="http://electroly.com/sad/try#b2e540457b72a2265d3b073b599cf6f5"><b>Try it now in your browser!</b></a>
 </p>
 
 <p align="center">
