@@ -7,5 +7,7 @@ LFLAGS=
 SEP=/
 SAD_OUT_FLAG=-Febin/sad
 SAD_TEST_OUT_FLAG=-Febin/sad-test
+SAD_RUN=bin/sad
+SAD_TEST_RUN=bin/sad-test
 
 include Makefile.base

@@ -1,4 +1,4 @@
-/* SAD-Script
+/* Sad-Script
  * Copyright (c) 2015, Brian Luft.
  * All rights reserved.
  *
@@ -57,7 +57,7 @@
 #pragma warning(disable: 4711) /* function '...' selected for automatic inline expansion */
 #endif
 
-#define SD_NUM_ALLOCATIONS_PER_GC 10000
+#define SD_NUM_ALLOCATIONS_PER_GC 5000000
    /* run the garbage collector after this many value allocations */
 
 /*********************************************************************************************************************/
@@ -272,6 +272,8 @@ static SdResult SdEngine_Intrinsic_GetType(SdEngine_r self, SdList_r arguments, 
 static SdResult SdEngine_Intrinsic_IntLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_DoubleLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_StringLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_IntToDouble(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_DoubleToInt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -436,6 +438,34 @@ SdBool SdFailed(SdResult result) {
 }
 
 /* Sad ***************************************************************************************************************/
+SdErr SdRunScript(const char* prelude_file_path, const char* script_code) {
+   SdResult result = SdResult_SUCCESS;
+   SdString* prelude_file_path_str = NULL;
+   SdString* prelude_code = NULL;
+   Sad* sad = NULL;
+
+   sad = Sad_New();
+   prelude_file_path_str = SdString_FromCStr(prelude_file_path);
+   if (SdFailed(result = SdFile_ReadAllText(prelude_file_path_str, &prelude_code)))
+      goto end;
+   if (SdFailed(result = Sad_AddScript(sad, SdString_CStr(prelude_code))))
+      goto end;
+   if (SdFailed(result = Sad_AddScript(sad, script_code)))
+      goto end;
+   result = Sad_Execute(sad);
+
+end:
+   if (prelude_file_path_str) SdString_Delete(prelude_file_path_str);
+   if (prelude_code) SdString_Delete(prelude_code);
+   if (sad) Sad_Delete(sad);
+
+   if (SdFailed(result))
+      fprintf(stderr, "ERROR: %s\n", result.message);
+   else
+      printf("\n");
+   return result.code;
+}
+
 Sad* Sad_New(void) {
    Sad* self = SdAlloc(sizeof(Sad));
    self->env = SdEnv_New();
@@ -3519,11 +3549,13 @@ end:
 }
 
 /* SdEngine **********************************************************************************************************/
+#define STRINGIFY(x) #x
 #define SdEngine_INTRINSIC_START_ARGS1(name) \
    static SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL; \
       SdType a_type = SdType_NIL; \
+      const char* function_name = STRINGIFY(name); \
       SdAssert(self); \
       SdAssert(arguments); \
       SdAssert(out_return); \
@@ -3535,6 +3567,7 @@ end:
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL, b_val = NULL; \
       SdType a_type = SdType_NIL, b_type = SdType_NIL; \
+      const char* function_name = STRINGIFY(name); \
       SdAssert(self); \
       SdAssert(arguments); \
       SdAssert(out_return); \
@@ -3546,6 +3579,7 @@ end:
       SdResult result = SdResult_SUCCESS; \
       SdValue_r a_val = NULL, b_val = NULL, c_val = NULL; \
       SdType a_type = SdType_NIL, b_type = SdType_NIL, c_type = SdType_NIL; \
+      const char* function_name = STRINGIFY(name); \
       SdAssert(self); \
       SdAssert(arguments); \
       SdAssert(out_return); \
@@ -3555,8 +3589,12 @@ end:
 #define SdEngine_INTRINSIC_END \
       if (*out_return) \
          return SdResult_SUCCESS; \
-      else \
-         return SdFail(SdErr_TYPE_MISMATCH, "Invalid argument type."); \
+      else { \
+         SdString* name_str = SdString_FromCStr(function_name); \
+         result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Invalid argument type in function: ", name_str); \
+         SdString_Delete(name_str); \
+         return result; \
+      } \
    }
 #define SdEngine_INTRINSIC_INT2(name, expr) \
    SdEngine_INTRINSIC_START_ARGS2(name) \
@@ -4618,6 +4656,7 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
 
       case 'd':
          INTRINSIC("double.<", SdEngine_Intrinsic_DoubleLessThan);
+         INTRINSIC("double.to-int", SdEngine_Intrinsic_DoubleToInt);
          break;
 
       case 'e':
@@ -4640,6 +4679,7 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
 
       case 'i':
          INTRINSIC("int.<", SdEngine_Intrinsic_IntLessThan);
+         INTRINSIC("int.to-double", SdEngine_Intrinsic_IntToDouble);
          break;
 
       case 'l':
@@ -4984,7 +5024,6 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ErrorMessage)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_GetType)
-   SdUnreferenced(self);
    if (a_type == SdType_INT) {
       *out_return = SdEnv_BoxType(self->env, (SdType)SdValue_GetInt(a_val));
    }
@@ -5006,4 +5045,16 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringLessThan)
    if (a_type != SdType_STRING || b_type != SdType_STRING)
       return SdFail(SdErr_TYPE_MISMATCH, "Arguments must be strings.");
    *out_return = SdEnv_BoxBool(self->env, SdString_Compare(SdValue_GetString(a_val), SdValue_GetString(b_val)) < 0);
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_IntToDouble)
+   if (a_type == SdType_INT) {
+      *out_return = SdEnv_BoxDouble(self->env, (double)SdValue_GetInt(a_val));
+   }
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_DoubleToInt)
+   if (a_type == SdType_DOUBLE) {
+      *out_return = SdEnv_BoxInt(self->env, (int)SdValue_GetDouble(a_val));
+   }
 SdEngine_INTRINSIC_END

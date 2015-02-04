@@ -1,4 +1,4 @@
-/* SAD-Script
+/* Sad-Script
  * Copyright (c) 2015, Brian Luft.
  * All rights reserved.
  *
@@ -221,6 +221,8 @@ SdResult       SdFailWithStringSuffix(SdErr code, const char* message, SdString_
 SdBool         SdFailed(SdResult result);
 
 /* Sad ***************************************************************************************************************/
+SdErr          SdRunScript(const char* prelude_file_path, const char* script_code);
+
 Sad*           Sad_New(void);
 void           Sad_Delete(Sad* self);
 SdResult       Sad_AddScript(Sad_r self, const char* code);

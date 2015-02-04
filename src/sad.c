@@ -1,4 +1,4 @@
-/* SAD-Script Command Line Interpreter
+/* Sad-Script Command Line Interpreter
  * Copyright (c) 2015, Brian Luft.
  * All rights reserved.
  *

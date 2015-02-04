@@ -1,4 +1,4 @@
-// SAD-Script: S-Expressions and Dashes
+// Sad-Script: S-Expressions and Dashes
 
 // non-terminals
 <program> ::= (<function> | <statement>)*

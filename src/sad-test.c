@@ -1,4 +1,4 @@
-/* SAD-Script Test Checker
+/* Sad-Script Test Checker
  * Copyright (c) 2015, Brian Luft.
  * All rights reserved.
  *
@@ -118,6 +118,7 @@ int main(int argc, char* argv[]) {
    char* expected = NULL;
    const char* actual_file_path;
    char* actual = NULL;
+   const char* actual_ltrimmed = NULL;
 
    if (argc != 3) {
       fprintf(stderr, "Syntax: sad-test <.sad file> <actual file>\n");
@@ -142,14 +143,18 @@ int main(int argc, char* argv[]) {
       goto end;
    }
 
-   if (strcmp(expected, actual) != 0) {
+   actual_ltrimmed = actual;
+   while (strchr("\r\n\t ", actual_ltrimmed[0]))
+      actual_ltrimmed++;
+
+   if (strcmp(expected, actual_ltrimmed) != 0) {
       printf("\n");
       printf("------------------------------------------------------------------------------\n");
       printf("TEST FAILED: %s\n\n", expected_file_path);
       printf("---Expected---\n\n");
       printf("%s\n\n", expected);
       printf("---Actual---\n\n");
-      printf("%s\n\n", actual);
+      printf("%s\n\n", actual_ltrimmed);
       printf("------------------------------------------------------------------------------\n\n");
    }
 

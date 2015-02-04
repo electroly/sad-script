@@ -1,4 +1,4 @@
-// SAD-Script Prelude
+// Sad-Script Prelude
 // Copyright (c) 2015, Brian Luft.
 // All rights reserved.
 //
@@ -62,7 +62,9 @@ import function not (x)
 
 import function = (a b)
 import function int.< (a b)
+import function int.to-double (x)
 import function double.< (a b)
+import function double.to-int (x)
 import function string.< (a b)
 
 import function list.length (self) 
@@ -206,34 +208,30 @@ function get-type-number (x) = match {
    case Type: 8
 }
 
-function min xs {
-   var min-val = nil
+function min (xs) {
+   var min-value = nil
    for x in xs {
-      if (nil? min-val) {
-         set min-val = x
-      } elseif [x < min-val] {
-         set min-val = x
+      if [(nil? min-value) or [x > min-value]] {
+         set min-value = x
       }
    }
-   return min-val
+   return min-value
 }
 
-function max xs {
-   var max-val = nil
+function max (xs) {
+   var max-value = nil
    for x in xs {
-      if (nil? max-val) {
-         set max-val = x
-      } elseif [x > max-val] {
-         set max-val = x
+      if [(nil? max-value) or [x > max-value]] {
+         set max-value = x
       }
    }
-   return max-val
+   return max-value
 }
 
 function list.< (x y) {
    var x-length = (length x)
    var y-length = (length y)
-   var min-length = (min x-length y-length)
+   var min-length = (min (list x-length y-length))
    for i from 0 to [min-length - 1] {
       if [[x @ i] < [y @ i]] {
          return true
@@ -326,16 +324,33 @@ function to-list (xs) {
    }
 }
 
-function ... (low high) = \() {
+function ... args = \() {
+   var low = 0
+   var high = 0
+   switch (list.length args) {
+      case 1: {
+         set low = [args @ 0]
+         set high = nil
+      }
+      case 2: {
+         set low = [args @ 0]
+         set high = [args @ 1]
+      }
+      default: {
+         die "Wrong number of arguments to ..."
+      }
+   }
    var n = low
    return \() {
-      if [n > high] {
-         return nil
-      } else {
-         var old-n = n
-         set n = [n + 1]
-         return old-n
-      }
+      if (non-nil? high) {
+         if [n > high] {
+            return nil
+         }
+      } 
+
+      var old-n = n
+      set n = [n + 1]
+      return old-n
    }
 }
 
@@ -550,8 +565,59 @@ function sort (key-selector-func xs) {
    }
 }
 
-function any? (xs) = (nil? (first xs))
-function none? (xs) = (non-nil? (first xs))
+function take-while (predicate xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      var done = false
+      return \() {
+         var x = (iterator)
+         if done {
+            return nil
+         } elseif (predicate x) {
+            return x
+         } else {
+            set done = true
+            return nil
+         }
+      }
+   }
+}
+
+function cross-join (xs ys) {
+   var xs-stream = (to-stream xs)
+   var ys-stream = (to-stream ys)
+   return \() {
+      var xs-iterator = (xs-stream)
+      var ys-iterator = nil
+      var x = nil
+      return \() {
+         if (nil? xs-iterator) {
+            return nil
+         }
+         while true {
+            if (nil? x) {
+               set x = (xs-iterator)
+               if (nil? x) {
+                  set xs-iterator = nil
+                  return nil
+               }
+               set ys-iterator = (ys-stream)
+            }
+            var y = (ys-iterator)
+            if (nil? y) {
+               set ys-iterator = nil
+               set x = nil
+            } else {
+               return (list x y)
+            }
+         }
+      }
+   }
+}
+
+function any? (xs) = (non-nil? (first xs))
+function none? (xs) = (nil? (first xs))
 
 // hashtable //////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A list of buckets, where the index into the list equals [hash % number-of-buckets]

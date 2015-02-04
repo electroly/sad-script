@@ -1,0 +1,31 @@
+//547
+
+// Project Euler - 10001st prime
+// Problem 7
+// By listing the first six prime numbers: 2, 3, 5, 7, 11, and 13, we can see that the 6th prime is 13.
+//
+// What is the 10 001st prime number?
+
+// Note: to make it run faster, we'll just get the 101st prime number.
+// Expected result: 547
+
+function has-factor? (n x) = (zero? [n % x])
+
+function prime? (n) = (pipe [2 ... [n - 1]] 
+                            (filter (has-factor? n)) 
+                            none?)
+
+// infinite sequence of prime numbers
+function primes-sequence () = \() {
+   var n = 1
+   return \() {
+      do {
+         set n = [n + 1]
+      } while (not (prime? n))
+      return n
+   }
+}
+
+var result = (pipe (primes-sequence) (skip 100) first)
+
+(println result)

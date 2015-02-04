@@ -1,8 +1,10 @@
 main.exe
 a.exe
 sad.exe
+ideas.txt
 bin/
 testresults/
+release/
 *.obj
 *.o
 *.err

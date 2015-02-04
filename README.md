@@ -1,8 +1,12 @@
-SAD-Script
+Sad-Script
 ----------
 
 <p align="center">
-"S-Expressions and Dashes" or "Simple and Dumb"
+<a href="http://electroly.com/sad/try#b8edde764ff206b6bb56aa0cb92b4277"><b>Try it now in your browser!</b></a>
+</p>
+
+<p align="center">
+<a href="http://electroly.com/sad/sad-script.zip"><b>Download the latest build (with source)!</b></a>
 </p>
 
 A **dynamically-typed, interpreted, garbage-collected language** with 8 data types: `Int`, `Double`, `Bool`, `String`, `List`, `Function`, `Error`, and `Type`.  There are no semicolons, and whitespace is insignificant.  Identifiers can contain anything except parentheses, braces, brackets, double quotes, colons, backslashes, the lambda symbol (`λ`), and a small handful of reserved keywords.  Identifiers must contain at least one character that isn't a digit and isn't a period, in order to distinguish identifiers from integer and double literals.  Variables must be declared with `var` before they are used.  A default value must always be provided.
@@ -52,6 +56,6 @@ function returns-list () = (list 1 2 3)
 var (a b c) = (returns-list)  // a=1, b=2, c=3
 ```
 
-The interpreter is written in **ANSI C** (C89) and compiles cleanly with `-ansi -pedantic -Wall -Wextra -Werror` compiler flags.  A wide variety of compilers are supported: `gcc`, `clang`, Microsoft Visual C++ 2013, TinyCC (`tcc`), LCC-Win (`lc`), Borland C++ 5.5 (`bcc32`), Open Watcom (`owcc`).  Both 32-bit and 64-bit builds are supported.
+The interpreter is written in **ANSI C** (C89) and compiles cleanly with `-ansi -pedantic -Wall -Wextra -Werror` compiler flags.  A wide variety of compilers are supported: `gcc`, `clang`, Microsoft Visual C++ 2013, Emscripten (`emcc`), TinyCC (`tcc`), LCC-Win (`lc`), Borland C++ 5.5 (`bcc32`), Open Watcom (`owcc`).  Both 32-bit and 64-bit builds are supported.
 
 It has been tested in Windows 7, OS X 10.9, and Debian Linux 7.7.  The interpreter can be embedded in client applications simply by including `sad-script.c` and `sad-script.h` file in the client project or Makefile.  No need to build or link a separate library.  Since the bindings are in C, they can be accessed easily from any language with a FFI.  For instance .NET can access it via P/Invoke.

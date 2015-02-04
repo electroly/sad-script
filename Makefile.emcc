@@ -1,0 +1,20 @@
+# Emscripten
+
+CC=emcc
+COMPILER=Emscripten
+SAD_SCRIPT_CFLAGS=-DNDEBUG -ansi -pedantic -Wall -Wextra -Werror -O2 --embed-file src/prelude.sad --memory-init-file 0 -s ALLOW_MEMORY_GROWTH=1
+CFLAGS=$(SAD_SCRIPT_CFLAGS) --embed-file tests
+LFLAGS=
+SEP=/
+SAD_OUT_FLAG=-o bin/sad.js
+SAD_TEST_OUT_FLAG=-o bin/sad-test
+SAD_TEST_CC=gcc
+SAD_RUN=node bin/sad.js
+SAD_TEST_RUN=bin/sad-test
+SAD_TEST_CFLAGS=
+
+bin/sad-script: bin bin/prelude.sad src/sad-script.c
+	@echo bin/sad-script \(using $(COMPILER)\)
+	@$(CC) $(EXTRAFLAGS) $(SAD_SCRIPT_CFLAGS) $(LFLAGS) src/sad-script.c -o bin/sad-script.js -s EXPORTED_FUNCTIONS="['_SdRunScript']"
+
+include Makefile.base

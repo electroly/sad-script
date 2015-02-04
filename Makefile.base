@@ -1,4 +1,7 @@
-EXTRAFLAGS=
+EXTRAFLAGS ?=
+SAD_TEST_CC ?=$(CC)
+SAD_TEST_CFLAGS ?=$(CFLAGS)
+SAD_TEST_LFLAGS ?=$(LFLAGS)
 
 SAD_SOURCES=src/sad.c src/sad-script.c
 SAD_TEST_SOURCES=src/sad-test.c
@@ -16,7 +19,7 @@ bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
 
 bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
 	@echo bin/sad-test \(using $(COMPILER)\)
-	@$(CC) $(EXTRAFLAGS) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG)
+	@$(SAD_TEST_CC) $(EXTRAFLAGS) $(SAD_TEST_CFLAGS) $(SAD_TEST_LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG)
 	-@rm -f *.obj
 	-@rm -f *.o
 
@@ -39,7 +42,7 @@ test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 
 $(TESTRESULTS): 
 	@echo $(@:testresults/%.testresult=tests/%.sad)
-	-@bin/sad --prelude bin$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err
+	-@$(SAD_RUN) --prelude src$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err
 	@cat $@.err >> $@
 	@rm $@.err
-	@bin/sad-test $(@:testresults/%.testresult=tests/%.sad) $@
+	@$(SAD_TEST_RUN) $(@:testresults/%.testresult=tests/%.sad) $@
