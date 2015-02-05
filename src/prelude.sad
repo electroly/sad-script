@@ -74,7 +74,8 @@ import function list.insert-at! (self index value)
 import function list.remove-at! (self index) 
 
 import function string.length (self) 
-import function string.get-at (self index) 
+import function string.get-at (self index)
+import function string.join (separator strings)
 
 import function error (message)
 import function error.message (self)

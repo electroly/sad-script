@@ -274,6 +274,7 @@ static SdResult SdEngine_Intrinsic_DoubleLessThan(SdEngine_r self, SdList_r argu
 static SdResult SdEngine_Intrinsic_StringLessThan(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_IntToDouble(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_DoubleToInt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_StringJoin(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -4711,6 +4712,7 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
          INTRINSIC("string.length", SdEngine_Intrinsic_StringLength);
          INTRINSIC("string.get-at", SdEngine_Intrinsic_StringGetAt);
          INTRINSIC("string.<", SdEngine_Intrinsic_StringLessThan);
+         INTRINSIC("string.join", SdEngine_Intrinsic_StringJoin);
          break;
 
       case 't':
@@ -5056,5 +5058,43 @@ SdEngine_INTRINSIC_END
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_DoubleToInt)
    if (a_type == SdType_DOUBLE) {
       *out_return = SdEnv_BoxInt(self->env, (int)SdValue_GetDouble(a_val));
+   }
+SdEngine_INTRINSIC_END
+
+SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringJoin)
+   if (a_type == SdType_STRING && b_type == SdType_LIST) {
+      SdStringBuf_r buf = NULL;
+      SdString_r separator = NULL;
+      SdList_r strings = NULL;
+      size_t i = 0, count = 0;
+
+      separator = SdValue_GetString(a_val);
+      strings = SdValue_GetList(b_val);
+      count = SdList_Count(strings);
+
+      if (count == 0) {
+         *out_return = SdEnv_BoxString(self->env, SdString_New());
+         return SdResult_SUCCESS;
+      }
+
+      buf = SdStringBuf_New();
+
+      for (i = 0; i < count; i++) {
+         SdValue_r str = NULL;
+
+         if (i > 0)
+            SdStringBuf_AppendString(buf, separator);
+
+         str = SdList_GetAt(strings, i);
+         if (SdValue_Type(str) == SdType_STRING) {
+            SdStringBuf_AppendString(buf, SdValue_GetString(str));
+         } else {
+            SdStringBuf_Delete(buf);
+            return SdFail(SdErr_TYPE_MISMATCH, "All arguments to string.join must be strings.");
+         }
+      }
+
+      *out_return = SdEnv_BoxString(self->env, SdString_FromCStr(SdStringBuf_CStr(buf)));
+      SdStringBuf_Delete(buf);
    }
 SdEngine_INTRINSIC_END

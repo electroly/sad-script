@@ -1,0 +1,9 @@
+//1,2,3
+//1, 2, 3
+//
+//123
+
+(println (string.join "," (list "1" "2" "3")))
+(println (string.join ", " (list "1" "2" "3")))
+(println (string.join ", " (list)))
+(println (string.join "" (list "1" "2" "3")))
