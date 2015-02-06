@@ -4491,7 +4491,7 @@ static SdResult SdEngine_ExecuteDo(SdEngine_r self, SdValue_r frame, SdValue_r s
    }
 
 end:
-   if (loop_frame) SdEnv_EndFrame(self->env, frame);
+   if (loop_frame) SdEnv_EndFrame(self->env, loop_frame);
    return result;
 }
 
