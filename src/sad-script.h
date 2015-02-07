@@ -46,7 +46,7 @@ extern "C" {
 /*********************************************************************************************************************/
 
 /* A raw pointer means that ownership is being transferred.
-   An _r typedef means that a pointer is only being only; ownership is not transferred. */
+   An _r typedef means that a pointer is only being borrowed; ownership is not transferred. */
 typedef struct SdResult_s SdResult;
 typedef struct SdSearchResult_s SdSearchResult;
 typedef struct Sad_s Sad;
