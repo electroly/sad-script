@@ -343,7 +343,7 @@ static void SdAssertNonEmptyString(SdString_r x) {
 }
 #endif
 
-#ifdef SD_DEBUG_MEMUSE
+#if defined(SD_DEBUG_MEMUSE) || defined(SD_DEBUG_ALL)
 unsigned long sd_num_allocs = 0;
 unsigned long sd_num_reallocs = 0;
 #endif
@@ -354,7 +354,7 @@ void* SdAlloc(size_t size) {
    if (size == 0)
       size = 1;
 
-#ifdef SD_DEBUG_MEMUSE
+#if defined(SD_DEBUG_MEMUSE) || defined(SD_DEBUG_ALL)
    sd_num_allocs++;
 #endif
 
@@ -377,7 +377,7 @@ void* SdRealloc(void* ptr, size_t size) {
 
    new_ptr = realloc(ptr, size);
 
-#ifdef SD_DEBUG_MEMUSE
+#if defined(SD_DEBUG_MEMUSE) || defined(SD_DEBUG_ALL)
    sd_num_reallocs++;
 #endif
 
