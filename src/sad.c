@@ -100,25 +100,25 @@ int main(int argc, char* argv[]) {
    }
 
    if (SdFailed(result = Sad_AddScript(sad, SdString_CStr(prelude_text)))) {
-      fprintf(stderr, "ERROR: Failed to parse the prelude script file.\n%s\n", result.message);
+      fprintf(stderr, "ERROR: Failed to parse the prelude script file.\n%s\n", SdGetLastFailMessage());
       ret = -1;
       goto end;
    }
 
    if (SdFailed(result = SdFile_ReadAllText(file_path, &file_text))) {
-      fprintf(stderr, "ERROR: Failed to read the script file.\n%s\n", result.message);
+      fprintf(stderr, "ERROR: Failed to read the script file.\n%s\n", SdGetLastFailMessage());
       ret = -1;
       goto end;
    }
 
    if (SdFailed(result = Sad_AddScript(sad, SdString_CStr(file_text)))) {
-      fprintf(stderr, "ERROR: Failed to parse the script file.\n%s\n", result.message);
+      fprintf(stderr, "ERROR: Failed to parse the script file.\n%s\n", SdGetLastFailMessage());
       ret = -1;
       goto end;
    }
 
    if (SdFailed(result = Sad_Execute(sad))) {
-      fprintf(stderr, "ERROR: %s\n", result.message);
+      fprintf(stderr, "ERROR: %s\n", SdGetLastFailMessage());
       ret = -1;
       goto end;
    }

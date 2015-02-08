@@ -307,7 +307,8 @@ static SdResult SdEngine_Intrinsic_DoubleToInt(SdEngine_r self, SdList_r argumen
 static SdResult SdEngine_Intrinsic_StringJoin(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Global variables */
-SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
+SdResult SdResult_SUCCESS = { SdErr_SUCCESS };
+static char SdResult_Message[500] = { 0 };
 static SdValue SdValue_NIL = { SdType_NIL, { 0 }, SdFalse };
 static SdValue SdValue_TRUE = { SdType_BOOL, { SdTrue }, SdFalse };
 static SdValue SdValue_FALSE = { SdType_BOOL, { SdFalse }, SdFalse };
@@ -585,8 +586,8 @@ SdResult SdFail(SdErr code, const char* message) {
    SdAssert(message);
    memset(&err, 0, sizeof(err));
    err.code = code;
-   strncpy(err.message, message, sizeof(err.message) - 1); 
-      /* ok if strncpy doesn't add a null terminator; memset() above zeroed out the string. */
+   strncpy(SdResult_Message, message, sizeof(SdResult_Message) - 1);
+   SdResult_Message[sizeof(SdResult_Message) - 1] = 0; /* strncpy won't add a null terminator at max length */
    return err;
 }
 
@@ -608,6 +609,10 @@ SdBool SdFailed(SdResult result) {
    return result.code != SdErr_SUCCESS;
 }
 
+const char* SdGetLastFailMessage(void) {
+   return SdResult_Message;
+}
+
 /* Sad ***************************************************************************************************************/
 SdErr SdRunScript(const char* prelude_file_path, const char* script_code) {
    SdResult result = SdResult_SUCCESS;
@@ -626,14 +631,15 @@ SdErr SdRunScript(const char* prelude_file_path, const char* script_code) {
    result = Sad_Execute(sad);
 
 end:
+   if (SdFailed(result))
+      fprintf(stderr, "ERROR: %s\n", SdGetLastFailMessage());
+   else
+      printf("\n");
+
    if (prelude_file_path_str) SdString_Delete(prelude_file_path_str);
    if (prelude_code) SdString_Delete(prelude_code);
    if (sad) Sad_Delete(sad);
 
-   if (SdFailed(result))
-      fprintf(stderr, "ERROR: %s\n", result.message);
-   else
-      printf("\n");
    return result.code;
 }
 

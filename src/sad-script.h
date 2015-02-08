@@ -203,7 +203,6 @@ typedef enum SdNodeType_e {
 
 struct SdResult_s {
    SdErr code;
-   char message[80];
 };
 
 struct SdSearchResult_s {
@@ -219,7 +218,8 @@ extern SdResult SdResult_SUCCESS;
 SdResult       SdFail(SdErr code, const char* message);
 SdResult       SdFailWithStringSuffix(SdErr code, const char* message, SdString_r suffix);
 SdBool         SdFailed(SdResult result);
-
+const char*    SdGetLastFailMessage(void);
+   
 /* Sad ***************************************************************************************************************/
 SdErr          SdRunScript(const char* prelude_file_path, const char* script_code);
 
