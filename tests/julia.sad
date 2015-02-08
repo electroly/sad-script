@@ -1,0 +1,62 @@
+//|@@@@@@WWWWWWWWWWWW@@|
+//|@@@WWWWWW% &%WWWWWWW|
+//|@@WWWWWW%     %%%WWW|
+//|@WWWW%%%&o-   o$ O%W|
+//|WWW%      -         |
+//|W%# I           I #%|
+//|W         -      %WW|
+//|WW%O $o   -o&%%%WWWW|
+//|WWWW%%%     %WWWWWW@|
+//|@WWWWWWW%& %WWWWWW@@|
+//|
+
+var wi = 20
+var hi = 10
+var max-iterations = 30
+var c-re = -0.7
+var c-im = 0.27015
+var charset = (list "@" "W" "%" "&" "$" "#" "O" "I" "o" "+" "=" "-" "^" "," "." " " )
+
+var w = (int.to-double wi)
+var h = (int.to-double hi)
+var half-w = [0.5 * w]
+var half-h = [0.5 * h]
+
+var old-re = 0.
+var old-im = 0.
+var image = (list)
+
+for yi from 0 to [hi - 1] {
+   var y = (int.to-double yi)
+   for xi from 0 to [wi - 1] {
+      var x = (int.to-double xi)
+      var new-re = [[1.5 * [x - half-w]] / half-w]
+      var new-im = [[y - half-h] / half-h]
+      var stop = false
+      var i = 0
+      while (not stop) {
+         set old-re = new-re
+         set old-im = new-im
+         set new-re = [[[old-re ** 2.] - [old-im ** 2.]] + c-re]
+         set new-im = [[[2. * old-re] * old-im] + c-im]
+         if [[[new-re ** 2.] + [new-im ** 2.]] > 4.] {
+            set stop = true
+         }
+         if [i >= max-iterations] {
+            set stop = true
+         } else {
+            set i = [i + 1]
+         }
+      }
+      [image += [i / 2]]
+   }
+   [image += false]
+}
+
+(print "|")
+for x in image {
+   (print match x {
+      case Int: [charset @ x]
+      case false: "|\n|"
+   })
+}
