@@ -124,11 +124,14 @@ int main(int argc, char* argv[]) {
    }
 
 end:
+#if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_MSVC)
+   /* no need to free anything if the process is about to exit, unless we're looking for memory leaks */
    if (prelude_text) SdString_Delete(prelude_text);
    if (file_text) SdString_Delete(file_text);
    if (prelude_path) SdString_Delete(prelude_path);
    if (file_path) SdString_Delete(file_path);
    if (sad) Sad_Delete(sad);
+#endif
 
 #ifdef SD_DEBUG_MEMUSE
    printf("calls to SdAlloc:   %lu\n", sd_num_allocs);
