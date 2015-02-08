@@ -1371,6 +1371,62 @@ SdResult SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue
       return SdFailWithStringSuffix(SdErr_NAME_COLLISION, "Variable redeclaration: ", SdValue_GetString(name));
 }
 
+SdValue_r SdEnv_ResolveVarRefToSlot(SdEnv_r self, SdValue_r frame, SdValue_r var_ref) {
+   SdString_r identifier = NULL;
+   SdValue_r slot = NULL, frame_hops_val = NULL, index_in_frame_val = NULL;
+   
+   SdAssert(self);
+   SdAssert(frame);
+   SdAssert(var_ref);
+   SdAssertNode(frame, SdNodeType_FRAME);
+   SdAssert(SdAst_NodeType(var_ref) == SdNodeType_VAR_REF);
+   
+   identifier = SdAst_VarRef_Identifier(var_ref);
+   
+   /* we can skip the search if this variable reference contains the binding information */
+   frame_hops_val = SdAst_VarRef_FrameHops(var_ref);
+   index_in_frame_val = SdAst_VarRef_IndexInFrame(var_ref);
+   if (SdValue_Type(frame_hops_val) == SdType_INT && SdValue_Type(index_in_frame_val) == SdType_INT) {
+      int i = 0, frame_hops = 0, index_in_frame = 0;
+      SdValue_r bound_frame = NULL;
+      SdList_r slots = NULL;
+      SdString_r slot_name = NULL;
+      
+      frame_hops = SdValue_GetInt(frame_hops_val);
+      index_in_frame = SdValue_GetInt(index_in_frame_val);
+      SdAssert(frame_hops >= 0);
+      SdAssert(index_in_frame >= 0);
+      
+      bound_frame = frame;
+      for (i = 0; i < frame_hops; i++) {
+         SdAssert(bound_frame);
+         bound_frame = SdEnv_Frame_Parent(bound_frame);
+      }
+      
+      slots = SdEnv_Frame_VariableSlots(bound_frame);
+      SdAssert(index_in_frame < (int)SdList_Count(slots));
+      slot = SdList_GetAt(slots, index_in_frame);
+      slot_name = SdEnv_VariableSlot_Name(slot);
+      if (!SdString_Equals(slot_name, identifier))
+         slot = NULL;
+   }
+   
+   if (!slot) {
+      int frame_hops = 0, index_in_frame = 0;
+      
+      slot = SdEnv_FindVariableSlotLocation(self, frame, identifier, SdTrue, &frame_hops, &index_in_frame);
+
+      if (slot) {
+         /* save this binding information for next time */
+         SdAst_VarRef_SetFrameHops(self, var_ref, frame_hops);
+         SdAst_VarRef_SetIndexInFrame(self, var_ref, index_in_frame);
+      }
+   }
+   
+   return slot;
+}
+
+
 SdValue_r SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse) {
    int frame_hops = 0, index_in_frame = 0;
    return SdEnv_FindVariableSlotLocation(self, frame, name, traverse, &frame_hops, &index_in_frame);
@@ -1696,18 +1752,18 @@ SdValue_r SdAst_Body_New(SdEnv_r env, SdList* statements) {
 }
 SdAst_LIST_GETTER(SdAst_Body_Statements, SdNodeType_BODY, 1)
 
-SdValue_r SdAst_Call_New(SdEnv_r env, SdString* function_name, SdList* arguments) {
+SdValue_r SdAst_Call_New(SdEnv_r env, SdValue_r var_ref, SdList* arguments) {
    SdAst_BEGIN(SdNodeType_CALL)
 
    SdAssert(env);
-   SdAssertNonEmptyString(function_name);
+   SdAssertNode(var_ref, SdNodeType_VAR_REF);
    SdAssert(arguments);
 
-   SdAst_STRING(function_name)
+   SdAst_VALUE(var_ref)
    SdAst_LIST(arguments)
    SdAst_END
 }
-SdAst_STRING_GETTER(SdAst_Call_FunctionName, SdNodeType_CALL, 1)
+SdAst_VALUE_GETTER(SdAst_Call_VarRef, SdNodeType_CALL, 1)
 SdAst_LIST_GETTER(SdAst_Call_Arguments, SdNodeType_CALL, 2)
 
 SdValue_r SdAst_Var_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr) {
@@ -3207,7 +3263,7 @@ static SdResult SdParser_ParseCall(SdEnv_r env, SdScanner_r scanner, SdValue_r* 
          goto end;
    }
 
-   *out_node = SdAst_Call_New(env, function_name, arguments);
+   *out_node = SdAst_Call_New(env, SdAst_VarRef_New(env, function_name), arguments);
    function_name = NULL;
    arguments = NULL;
 end:
@@ -3780,18 +3836,21 @@ SdResult SdEngine_ExecuteProgram(SdEngine_r self) {
    return result;
 }
 
-SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdString_r function_name, SdList_r arguments, 
+SdResult SdEngine_Call(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdList_r arguments,
    SdValue_r* out_return) {
    SdValue_r closure_slot = NULL, closure = NULL;
+   SdString_r function_name = NULL;
 
    SdAssert(self);
    SdAssertNode(frame, SdNodeType_FRAME);
-   SdAssert(function_name);
+   SdAssert(var_ref);
    SdAssert(arguments);
    SdAssert(out_return);
-
+   
+   function_name = SdAst_VarRef_Identifier(var_ref);
+   
    /* ensure that 'function_name' refers to a defined closure */
-   closure_slot = SdEnv_FindVariableSlot(self->env, frame, function_name, SdTrue);
+   closure_slot = SdEnv_ResolveVarRefToSlot(self->env, frame, var_ref);
    if (!closure_slot)
       return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Function not found: ", function_name);
 
@@ -3974,59 +4033,18 @@ static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_
 }
 
 static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value) {
-   SdString_r identifier = NULL;
-   SdValue_r slot = NULL, frame_hops_val = NULL, index_in_frame_val = NULL;
+   SdValue_r slot = NULL;
 
    SdAssert(self);
-   SdAssert(frame);
-   SdAssert(var_ref);
    SdAssert(out_value);
-   SdAssertNode(frame, SdNodeType_FRAME);
-   SdAssert(SdAst_NodeType(var_ref) == SdNodeType_VAR_REF);
-
-   identifier = SdAst_VarRef_Identifier(var_ref);
-
-   /* we can skip the search if this variable reference contains the binding information */
-   frame_hops_val = SdAst_VarRef_FrameHops(var_ref);
-   index_in_frame_val = SdAst_VarRef_IndexInFrame(var_ref);
-   if (SdValue_Type(frame_hops_val) == SdType_INT && SdValue_Type(index_in_frame_val) == SdType_INT) {
-      int i = 0, frame_hops = 0, index_in_frame = 0;
-      SdValue_r bound_frame = NULL;
-      SdList_r slots = NULL;
-      SdString_r slot_name = NULL;
-
-      frame_hops = SdValue_GetInt(frame_hops_val);
-      index_in_frame = SdValue_GetInt(index_in_frame_val);
-      SdAssert(frame_hops >= 0);
-      SdAssert(index_in_frame >= 0);
-
-      bound_frame = frame;
-      for (i = 0; i < frame_hops; i++) {
-         SdAssert(bound_frame);
-         bound_frame = SdEnv_Frame_Parent(bound_frame);
-      }
-
-      slots = SdEnv_Frame_VariableSlots(bound_frame);
-      SdAssert(index_in_frame < (int)SdList_Count(slots));
-      slot = SdList_GetAt(slots, index_in_frame);
-      slot_name = SdEnv_VariableSlot_Name(slot);
-      if (!SdString_Equals(slot_name, identifier))
-         slot = NULL;
-   } 
-   
-   if (!slot) {
-      int frame_hops = 0, index_in_frame = 0;
-
-      slot = SdEnv_FindVariableSlotLocation(self->env, frame, identifier, SdTrue, &frame_hops, &index_in_frame);
-      if (!slot)
-         return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", identifier);
-
-      SdAst_VarRef_SetFrameHops(self->env, var_ref, frame_hops);
-      SdAst_VarRef_SetIndexInFrame(self->env, var_ref, index_in_frame);
+   slot = SdEnv_ResolveVarRefToSlot(self->env, frame, var_ref);
+   if (slot) {
+      *out_value = SdEnv_VariableSlot_Value(slot);
+      return SdResult_SUCCESS;
+   } else {
+      SdString_r identifier = SdAst_VarRef_Identifier(var_ref);
+      return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", identifier);
    }
-   
-   *out_value = SdEnv_VariableSlot_Value(slot);
-   return SdResult_SUCCESS;
 }
 
 static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdValue_r function, SdValue_r* out_value) {
@@ -4216,7 +4234,7 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
       SdList_SetAt(argument_values, i, argument_value);
    }
 
-   result = SdEngine_Call(self, frame, SdAst_Call_FunctionName(statement), argument_values, out_return);
+   result = SdEngine_Call(self, frame, SdAst_Call_VarRef(statement), argument_values, out_return);
 end:
    while (num_protected_values-- > 0)
       SdEnv_PopProtectedValue(self->env);
