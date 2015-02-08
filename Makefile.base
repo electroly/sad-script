@@ -41,7 +41,6 @@ clean: cleantests
 test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
 
 $(TESTRESULTS): 
-	@echo $(@:testresults/%.testresult=tests/%.sad)
 	-@$(SAD_RUN) --prelude src$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err
 	@cat $@.err >> $@
 	@rm $@.err
