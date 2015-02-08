@@ -2261,18 +2261,18 @@ SdValue_r SdAst_Var_New(SdEnv_r env, SdString* variable_name, SdValue_r value_ex
 SdAst_VALUE_GETTER(SdAst_Var_VariableName, SdNodeType_VAR, 1)
 SdAst_VALUE_GETTER(SdAst_Var_ValueExpr, SdNodeType_VAR, 2)
 
-SdValue_r SdAst_Set_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr) {
+SdValue_r SdAst_Set_New(SdEnv_r env, SdValue_r var_ref, SdValue_r value_expr) {
    SdAst_BEGIN(SdNodeType_SET)
 
    SdAssert(env);
-   SdAssertNonEmptyString(variable_name);
+   SdAssertNode(var_ref, SdNodeType_VAR_REF);
    SdAssertExpr(value_expr);
 
-   SdAst_STRING(variable_name)
+   SdAst_VALUE(var_ref)
    SdAst_VALUE(value_expr)
    SdAst_END
 }
-SdAst_STRING_GETTER(SdAst_Set_VariableName, SdNodeType_SET, 1)
+SdAst_VALUE_GETTER(SdAst_Set_VarRef, SdNodeType_SET, 1)
 SdAst_VALUE_GETTER(SdAst_Set_ValueExpr, SdNodeType_SET, 2)
 
 SdValue_r SdAst_MultiVar_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr) {
@@ -2289,18 +2289,18 @@ SdValue_r SdAst_MultiVar_New(SdEnv_r env, SdList* variable_names, SdValue_r valu
 SdAst_LIST_GETTER(SdAst_MultiVar_VariableNames, SdNodeType_MULTI_VAR, 1)
 SdAst_VALUE_GETTER(SdAst_MultiVar_ValueExpr, SdNodeType_MULTI_VAR, 2)
 
-SdValue_r SdAst_MultiSet_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr) {
+SdValue_r SdAst_MultiSet_New(SdEnv_r env, SdList* var_refs, SdValue_r value_expr) {
    SdAst_BEGIN(SdNodeType_MULTI_SET)
 
    SdAssert(env);
-   SdAssertAllValuesOfType(variable_names, SdType_STRING);
+   SdAssertAllNodesOfType(var_refs, SdNodeType_VAR_REF);
    SdAssertExpr(value_expr);
 
-   SdAst_LIST(variable_names)
+   SdAst_LIST(var_refs)
    SdAst_VALUE(value_expr)
    SdAst_END
 }
-SdAst_LIST_GETTER(SdAst_MultiSet_VariableNames, SdNodeType_MULTI_SET, 1)
+SdAst_LIST_GETTER(SdAst_MultiSet_VarRefs, SdNodeType_MULTI_SET, 1)
 SdAst_VALUE_GETTER(SdAst_MultiSet_ValueExpr, SdNodeType_MULTI_SET, 2)
 
 SdValue_r SdAst_If_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r true_body, SdList* else_ifs,
@@ -3812,7 +3812,7 @@ static SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
       identifiers = SdList_New();
       while (SdScanner_PeekType(scanner) != SdTokenType_CLOSE_PAREN) {
          SdParser_READ_IDENTIFIER(identifier);
-         SdList_Append(identifiers, SdEnv_BoxString(env, identifier));
+         SdList_Append(identifiers, SdAst_VarRef_New(env, identifier));
          identifier = NULL;
       }
       SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
@@ -3827,7 +3827,7 @@ static SdResult SdParser_ParseSet(SdEnv_r env, SdScanner_r scanner, SdValue_r* o
       SdParser_CALL(SdParser_ReadExpectEquals(scanner));
       SdParser_READ_EXPR(expr);
 
-      *out_node = SdAst_Set_New(env, identifier, expr);
+      *out_node = SdAst_Set_New(env, SdAst_VarRef_New(env, identifier), expr);
       identifier = NULL;
    }
 
@@ -4776,7 +4776,7 @@ static SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdVal
 static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
    SdString_r name = NULL;
-   SdValue_r slot = NULL, expr = NULL, value = NULL;
+   SdValue_r slot = NULL, expr = NULL, value = NULL, var_ref = NULL;
 
    SdAssert(self);
    SdAssert(frame);
@@ -4785,8 +4785,8 @@ static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r 
    SdAssert(SdAst_NodeType(statement) == SdNodeType_SET);
 
    /* the variable slot must already exist */
-   name = SdAst_Set_VariableName(statement);
-   slot = SdEnv_FindVariableSlot(self->env, frame, name, SdTrue);
+   var_ref = SdAst_Set_VarRef(statement);
+   slot = SdEnv_ResolveVarRefToSlot(self->env, frame, var_ref);
    if (!slot)
       return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", name);
 
@@ -4802,7 +4802,7 @@ static SdResult SdEngine_ExecuteSet(SdEngine_r self, SdValue_r frame, SdValue_r 
 
 static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdValue_r statement) {
    SdResult result = SdResult_SUCCESS;
-   SdList_r names = NULL, list = NULL;
+   SdList_r list = NULL, var_refs = NULL;
    SdValue_r expr = NULL, list_value = NULL, element_value = NULL, slot = NULL, name = NULL;
    size_t i = 0, names_count = 0, list_count = 0;
 
@@ -4812,7 +4812,7 @@ static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdVal
    SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(statement) == SdNodeType_MULTI_SET);
 
-   names = SdAst_MultiSet_VariableNames(statement);
+   var_refs = SdAst_MultiSet_VarRefs(statement);
    expr = SdAst_MultiSet_ValueExpr(statement);
    if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &list_value)))
       return result;
@@ -4821,13 +4821,13 @@ static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdVal
    
    list = SdValue_GetList(list_value);
    list_count = SdList_Count(list);
-   names_count = SdList_Count(names);
+   names_count = SdList_Count(var_refs);
    for (i = 0; i < names_count; i++) {
-      name = SdList_GetAt(names, i);
+      SdValue_r var_ref = SdList_GetAt(var_refs, i);
       element_value = (i < list_count) ? SdList_GetAt(list, i) : SdEnv_BoxNil(self->env);
 
       /* the variable slot must already exist */
-      slot = SdEnv_FindVariableSlot(self->env, frame, SdValue_GetString(name), SdTrue);
+      slot = SdEnv_ResolveVarRefToSlot(self->env, frame, var_ref);
       if (!slot)
          return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", SdValue_GetString(name));
 

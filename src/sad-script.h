@@ -374,9 +374,9 @@ SdValue_r      SdEnv_CallTrace_CallingFrame(SdValue_r self);
 Statement: ---------+-------------------------+---------------------+---------------+---------------|---------------
    (list CALL       | function-name:VarRef    | args:Lst<Expr>)     |               |               |
    (list VAR        | variable-name:Str       | value:Expr)         |               |               | 
-   (list SET        | variable-name:Str       | value:Expr)         |               |               | 
+   (list SET        | variable-name:VarRef    | value:Expr)         |               |               |
    (list MULTI_VAR  | variable-names:Lst<Str> | value:Expr)         |               |               | 
-   (list MULTI_SET  | variable-names:Lst<Str> | value:Expr)         |               |               | 
+   (list MULTI_SET  | var-names:Lst<VarRef>   | value:Expr)         |               |               |
    (list IF         | condition:Expr          | if-true:Body        | Lst<ElseIf>   | else:Body)    | 
    (list FOR        | variable-name:Str       | start:Expr          | stop:Expr     | Body)         | 
    (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr | Body)         | 
@@ -426,16 +426,16 @@ SdValue_r      SdAst_Var_New(SdEnv_r env, SdString* variable_name, SdValue_r val
 SdValue_r      SdAst_Var_VariableName(SdValue_r self);
 SdValue_r      SdAst_Var_ValueExpr(SdValue_r self);
 
-SdValue_r      SdAst_Set_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr);
-SdString_r     SdAst_Set_VariableName(SdValue_r self);
+SdValue_r      SdAst_Set_New(SdEnv_r env, SdValue_r var_ref, SdValue_r value_expr);
+SdValue_r      SdAst_Set_VarRef(SdValue_r self);
 SdValue_r      SdAst_Set_ValueExpr(SdValue_r self);
 
 SdValue_r      SdAst_MultiVar_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr);
 SdList_r       SdAst_MultiVar_VariableNames(SdValue_r self);
 SdValue_r      SdAst_MultiVar_ValueExpr(SdValue_r self);
 
-SdValue_r      SdAst_MultiSet_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr);
-SdList_r       SdAst_MultiSet_VariableNames(SdValue_r self);
+SdValue_r      SdAst_MultiSet_New(SdEnv_r env, SdList* var_refs, SdValue_r value_expr);
+SdList_r       SdAst_MultiSet_VarRefs(SdValue_r self);
 SdValue_r      SdAst_MultiSet_ValueExpr(SdValue_r self);
 
 SdValue_r      SdAst_If_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r true_body, SdList* else_ifs, 
