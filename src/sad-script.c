@@ -21,6 +21,7 @@
 /* Debugging options:
    define SD_DEBUG_ALL to enable all debugging code (requires Visual C++). this implies all the flags below:
    define SD_DEBUG_GC to run the garbage collector at every opportunity, catch double-boxing.
+   define SD_DEBUG_MEMUSE to track the total number and size of allocations
    define SD_DEBUG_MSVC to enable non-portable Visual C++ memory leak detection.
    define NDEBUG to disable assertions. 
 */
@@ -276,6 +277,12 @@ static SdResult SdEngine_Intrinsic_IntToDouble(SdEngine_r self, SdList_r argumen
 static SdResult SdEngine_Intrinsic_DoubleToInt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_StringJoin(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
+/* Global variables */
+SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
+static SdValue SdValue_NIL = { SdType_NIL, { 0 }, SdFalse };
+static SdValue SdValue_TRUE = { SdType_BOOL, { SdTrue }, SdFalse };
+static SdValue SdValue_FALSE = { SdType_BOOL, { SdFalse }, SdFalse };
+
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
 #define SdAssert(x) ((void)0)
@@ -336,11 +343,20 @@ static void SdAssertNonEmptyString(SdString_r x) {
 }
 #endif
 
+#ifdef SD_DEBUG_MEMUSE
+unsigned long sd_num_allocs = 0;
+unsigned long sd_num_reallocs = 0;
+#endif
+
 void* SdAlloc(size_t size) {
    void* ptr = NULL;
 
    if (size == 0)
       size = 1;
+
+#ifdef SD_DEBUG_MEMUSE
+   sd_num_allocs++;
+#endif
 
    ptr = calloc(1, size);
    if (!ptr) {
@@ -360,6 +376,11 @@ void* SdRealloc(void* ptr, size_t size) {
       size = 1;
 
    new_ptr = realloc(ptr, size);
+
+#ifdef SD_DEBUG_MEMUSE
+   sd_num_reallocs++;
+#endif
+
    /* If there is not enough available memory to expand the block to the given size, the original block is left 
       unchanged, and NULL is returned. */
    if (!new_ptr)
@@ -407,8 +428,6 @@ static const char* SdType_Name(SdType x) {
 }
 
 /* SdResult **********************************************************************************************************/
-SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
-
 SdResult SdFail(SdErr code, const char* message) {
    SdResult err;
 
@@ -896,6 +915,21 @@ void SdValue_SetGcMark(SdValue_r self, SdBool mark) {
 /* SdList ************************************************************************************************************/
 SdList* SdList_New(void) {
    return SdAlloc(sizeof(SdList));
+}
+
+SdList* SdList_NewWithLength(size_t length) {
+   SdList* list = NULL;
+   
+   list = SdAlloc(sizeof(SdList));
+   if (length > 0) {
+      size_t i = 0;
+
+      list->count = length;
+      list->values = SdAlloc(length * sizeof(SdValue_r));
+      for (i = 0; i < length; i++)
+         list->values[i] = &SdValue_NIL;
+   }
+   return list;
 }
 
 void SdList_Delete(SdList* self) {
@@ -1448,7 +1482,8 @@ SdChain_r SdEnv_GetCallTraceChain(SdEnv_r self) {
 
 SdValue_r SdEnv_BoxNil(SdEnv_r env) {
    SdAssert(env);
-   return SdEnv_AddToGc(env, SdValue_NewNil());
+   SdUnreferenced(env);
+   return &SdValue_NIL;
 }
 
 SdValue_r SdEnv_BoxInt(SdEnv_r env, int x) {
@@ -1463,7 +1498,8 @@ SdValue_r SdEnv_BoxDouble(SdEnv_r env, double x) {
 
 SdValue_r SdEnv_BoxBool(SdEnv_r env, SdBool x) {
    SdAssert(env);
-   return SdEnv_AddToGc(env, SdValue_NewBool(x));
+   SdUnreferenced(env);
+   return x ? &SdValue_TRUE : &SdValue_FALSE;
 }
 
 SdValue_r SdEnv_BoxString(SdEnv_r env, SdString* x) {
@@ -1501,11 +1537,11 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
 
    SdAssert(env);
    frame = SdEnv_Frame_New(env, NULL);
-   root_list = SdList_New();
-   SdList_Append(root_list, SdEnv_BoxInt(env, SdNodeType_ROOT));
-   SdList_Append(root_list, SdEnv_BoxList(env, SdList_New())); /* functions */
-   SdList_Append(root_list, SdEnv_BoxList(env, SdList_New())); /* statements */
-   SdList_Append(root_list, frame); /* bottom frame */
+   root_list = SdList_NewWithLength(4);
+   SdList_SetAt(root_list, 0, SdEnv_BoxInt(env, SdNodeType_ROOT));
+   SdList_SetAt(root_list, 1, SdEnv_BoxList(env, SdList_New())); /* functions */
+   SdList_SetAt(root_list, 2, SdEnv_BoxList(env, SdList_New())); /* statements */
+   SdList_SetAt(root_list, 3, frame); /* bottom frame */
    return SdEnv_BoxList(env, root_list);
 }
 
@@ -1573,10 +1609,10 @@ static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_value
    SdAssert(values);
    SdAssert(SdValue_Type(values[0]) == SdType_INT);
 
-   node = SdList_New();
+   node = SdList_NewWithLength(num_values);
    for (i = 0; i < num_values; i++) {
       SdAssert(values[i]);
-      SdList_Append(node, values[i]);
+      SdList_SetAt(node, i, values[i]);
    }
    return SdEnv_BoxList(env, node);
 }
@@ -1589,10 +1625,10 @@ static SdValue_r SdAst_NewFunctionNode(SdEnv_r env, SdValue_r values[], size_t n
    SdAssert(values);
    SdAssert(SdValue_Type(values[0]) == SdType_INT);
 
-   node = SdList_New();
+   node = SdList_NewWithLength(num_values);
    for (i = 0; i < num_values; i++) {
       SdAssert(values[i]);
-      SdList_Append(node, values[i]);
+      SdList_SetAt(node, i, values[i]);
    }
    return SdEnv_BoxFunction(env, node);
 }
@@ -3787,13 +3823,13 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    }
 
    /* construct the total arguments list from the partial arguments and the current arguments */
-   total_arguments_value = SdEnv_BoxList(self->env, SdList_New());
-   total_arguments = SdValue_GetList(total_arguments_value);
-   for (i = 0; i < partial_arguments_count; i++)
-      SdList_Append(total_arguments, SdList_GetAt(partial_arguments, i));
    count = SdList_Count(arguments);
+   total_arguments = SdList_NewWithLength(count + partial_arguments_count);
+   total_arguments_value = SdEnv_BoxList(self->env, total_arguments);
+   for (i = 0; i < partial_arguments_count; i++)
+      SdList_SetAt(total_arguments, i, SdList_GetAt(partial_arguments, i));
    for (i = 0; i < count; i++)
-      SdList_Append(total_arguments, SdList_GetAt(arguments, i));
+      SdList_SetAt(total_arguments, partial_arguments_count + i, SdList_GetAt(arguments, i));
 
    /* push an entry in the call stack so that call traces work */
    SdEnv_PushCall(self->env, frame, actual_function_name, total_arguments_value);
@@ -4092,8 +4128,8 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
    SdAssert(SdAst_NodeType(statement) == SdNodeType_CALL);
 
    argument_exprs = SdAst_Call_Arguments(statement);
-   argument_values = SdList_New();
    num_arguments = SdList_Count(argument_exprs);
+   argument_values = SdList_NewWithLength(num_arguments);
 
    for (i = 0; i < num_arguments; i++) {
       SdValue_r argument_expr = NULL, argument_value = NULL;
@@ -4102,7 +4138,7 @@ static SdResult SdEngine_ExecuteCall(SdEngine_r self, SdValue_r frame, SdValue_r
          goto end;
       SdEnv_PushProtectedValue(self->env, argument_value);
       num_protected_values++;
-      SdList_Append(argument_values, argument_value);
+      SdList_SetAt(argument_values, i, argument_value);
    }
 
    result = SdEngine_Call(self, frame, SdAst_Call_FunctionName(statement), argument_values, out_return);
@@ -4872,19 +4908,19 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_Add)
       case SdType_LIST: {
          SdList* list = NULL;
          SdList_r a_list = NULL, b_list = NULL;
-         size_t i = 0, count = 0;
-
-         list = SdList_New();
+         size_t i = 0, a_count = 0, b_count = 0;
 
          a_list = SdValue_GetList(a_val);
-         count = SdList_Count(a_list);
-         for (i = 0; i < count; i++)
-            SdList_Append(list, SdList_GetAt(a_list, i));
-
+         a_count = SdList_Count(a_list);
          b_list = SdValue_GetList(b_val);
-         count = SdList_Count(b_list);
-         for (i = 0; i < count; i++)
-            SdList_Append(list, SdList_GetAt(b_list, i));
+         b_count = SdList_Count(b_list);
+         list = SdList_NewWithLength(a_count + b_count);
+
+         for (i = 0; i < a_count; i++)
+            SdList_SetAt(list, i, SdList_GetAt(a_list, i));
+
+         for (i = 0; i < b_count; i++)
+            SdList_SetAt(list, a_count + i, SdList_GetAt(b_list, i));
 
          *out_return = SdEnv_BoxList(self->env, list);
          break;
@@ -5011,8 +5047,8 @@ SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_Error)
    if (a_type == SdType_STRING) {
-      SdList* error_list = SdList_New();
-      SdList_Append(error_list, a_val);
+      SdList* error_list = SdList_NewWithLength(1);
+      SdList_SetAt(error_list, 0, a_val);
       *out_return = SdEnv_BoxError(self->env, error_list);
    }
 SdEngine_INTRINSIC_END
@@ -5063,7 +5099,7 @@ SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringJoin)
    if (a_type == SdType_STRING && b_type == SdType_LIST) {
-      SdStringBuf_r buf = NULL;
+      SdStringBuf* buf = NULL;
       SdString_r separator = NULL;
       SdList_r strings = NULL;
       size_t i = 0, count = 0;

@@ -40,6 +40,12 @@
 
 #include "sad-script.h"
 
+#ifdef SD_DEBUG_MEMUSE
+/* defined in sad-script.c */
+extern unsigned long sd_num_allocs;
+extern unsigned long sd_num_reallocs;
+#endif
+
 int main(int argc, char* argv[]) {
    int ret = 0;
    SdResult result = SdResult_SUCCESS;
@@ -123,5 +129,11 @@ end:
    if (prelude_path) SdString_Delete(prelude_path);
    if (file_path) SdString_Delete(file_path);
    if (sad) Sad_Delete(sad);
+
+#ifdef SD_DEBUG_MEMUSE
+   printf("calls to SdAlloc:   %lu\n", sd_num_allocs);
+   printf("calls to SdRealloc: %lu\n", sd_num_reallocs);
+#endif
+
    return ret;
 }

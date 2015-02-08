@@ -276,6 +276,7 @@ void           SdValue_SetGcMark(SdValue_r self, SdBool mark);
 
 /* SdList ************************************************************************************************************/
 SdList*        SdList_New(void);
+SdList*        SdList_NewWithLength(size_t length);
 void           SdList_Delete(SdList* self);
 void           SdList_Append(SdList_r self, SdValue_r item);
 void           SdList_SetAt(SdList_r self, size_t index, SdValue_r item);
