@@ -13,13 +13,13 @@ all: bin/sad bin/sad-test
 
 bin/sad: bin bin/prelude.sad $(SAD_SOURCES)
 	@echo bin/sad \(using $(COMPILER)\)
-	@$(CC) $(EXTRAFLAGS) $(CFLAGS) $(LFLAGS) $(subst /,$(SEP),$(SAD_SOURCES)) $(SAD_OUT_FLAG)
+	@$(CC) $(EXTRAFLAGS) $(CFLAGS) $(subst /,$(SEP),$(SAD_SOURCES)) $(SAD_OUT_FLAG) $(LFLAGS)
 	-@rm -f *.obj
 	-@rm -f *.o
 
 bin/sad-test: bin bin/sad $(SAD_TEST_SOURCES)
 	@echo bin/sad-test \(using $(COMPILER)\)
-	@$(SAD_TEST_CC) $(EXTRAFLAGS) $(SAD_TEST_CFLAGS) $(SAD_TEST_LFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG)
+	@$(SAD_TEST_CC) $(EXTRAFLAGS) $(SAD_TEST_CFLAGS) $(subst /,$(SEP),$(SAD_TEST_SOURCES)) $(SAD_TEST_OUT_FLAG) $(SAD_TEST_LFLAGS)
 	-@rm -f *.obj
 	-@rm -f *.o
 
