@@ -61,12 +61,19 @@
 #define SD_NUM_ALLOCATIONS_PER_GC 5000000
    /* run the garbage collector after this many value allocations */
 
-#define SdValuePage_VALUES_PER_PAGE 40000
-   /* number of SdValue structs to fit on each page in the slab allocator */
+/* these constants define the number of item structs to fit on each page in the slab allocator. the values are chosen
+   so that they yield pages that are just under 1MB. assuming that calloc rounds allocations up to the nearest power of
+   two, this should waste very little memory. */
+#define SdValuePage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
+   /* 64-bit pages are 1,048,568 bytes. 32-bit pages are 1,048,572 bytes. */
+#define SdListPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 43689 : 90380)
+   /* 64-bit pages are 1,048,560 bytes. 32-bit pages are 1,048,572 bytes. */
 
 /*********************************************************************************************************************/
 typedef struct SdValuePage_s SdValuePage;
 typedef struct SdValuePage_s* SdValuePage_r;
+typedef struct SdListPage_s SdListPage;
+typedef struct SdListPage_s* SdListPage_r;
 typedef struct SdScannerNode_s SdScannerNode;
 typedef struct SdScannerNode_s* SdScannerNode_r;
 
@@ -102,17 +109,9 @@ struct SdValue_s {
    SdBool gc_mark; /* used by the mark-and-sweep garbage collector */
 };
 
-struct SdValuePage_s {
-   SdValue values[SdValuePage_VALUES_PER_PAGE];
-   SdValuePage* next_page;
-   size_t next_unused_index;
-   SdValue* free_ptrs[SdValuePage_VALUES_PER_PAGE];
-   size_t num_free_ptrs;
-};
-
 struct SdList_s {
-   SdValue_r* values;
    size_t count;
+   SdValue_r* values;
 #if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdBool is_boxed; /* whether this list has been boxed already */
 #endif
@@ -164,6 +163,20 @@ struct SdEngine_s {
    unsigned long last_gc; /* the value of SdEnv_AllocationCount last time the GC was run */
 };
 
+#define SdSlabAllocator_DEFINE_PAGE_STRUCT(struct_name, item_type, items_per_page) \
+   struct struct_name { \
+      item_type values[items_per_page]; \
+      struct struct_name* next_page; \
+      size_t next_unused_index; \
+      item_type* free_ptrs[items_per_page]; \
+      size_t num_free_ptrs; \
+   }
+
+SdSlabAllocator_DEFINE_PAGE_STRUCT(SdValuePage_s, SdValue, SdValuePage_ITEMS_PER_PAGE);
+SdSlabAllocator_DEFINE_PAGE_STRUCT(SdListPage_s, SdList, SdListPage_ITEMS_PER_PAGE);
+
+#undef SdSlabAllocator_DEFINE_PAGE_STRUCT
+
 static char* SdStrdup(const char* src);
 static void* SdUnreferenced(void* x);
 static void SdExit(const char* message);
@@ -171,6 +184,8 @@ static const char* SdType_Name(SdType x);
 
 static SdValue* SdAllocValue(void);
 static void SdFreeValue(SdValue* x);
+static SdList* SdAllocList(void);
+static void SdFreeList(SdList* x);
 
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
@@ -300,6 +315,8 @@ static SdValue SdValue_TRUE = { SdType_BOOL, { SdTrue }, SdFalse };
 static SdValue SdValue_FALSE = { SdType_BOOL, { SdFalse }, SdFalse };
 static SdValuePage* SdValuePage_FirstOpen = NULL;
 static SdValuePage* SdValuePage_FirstFull = NULL;
+static SdListPage* SdListPage_FirstOpen = NULL;
+static SdListPage* SdListPage_FirstFull = NULL;
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -445,95 +462,113 @@ static const char* SdType_Name(SdType x) {
    }
 }
 
-/* SdValue Allocator *************************************************************************************************/
-static SdValue* SdAllocValue(void) {
-   SdValuePage_r page = NULL;
-   SdValue* ptr = NULL;
-   
-   /* find a page with a slot free */
-   page = SdValuePage_FirstOpen;
-   
-   /* if there's no open page, then create a new page */
-   if (!page) {
-      page = SdAlloc(sizeof(SdValuePage));
-      SdValuePage_FirstOpen = page;
+/* SdSlabAllocator ***************************************************************************************************/
+#define SdSlabAllocator_DEFINE_ALLOC_FUNC(name, page_type, item_type, first_open, first_full, items_per_page) \
+   static item_type* name(void) { \
+      page_type* page = NULL; \
+      item_type* ptr = NULL; \
+      \
+      /* find a page with a slot free */ \
+      page = first_open; \
+      \
+      /* if there's no open page, then create a new page */ \
+      if (!page) { \
+         page = SdAlloc(sizeof(page_type)); \
+         first_open = page; \
+      } \
+      \
+      /* if there's anything in the free list, then use that first because recycling is cool.  if not, then press \
+       into service one of the slots that hasn't been used before. */ \
+      if (page->num_free_ptrs > 0) { \
+         /* remove it from the free list */ \
+         ptr = page->free_ptrs[page->num_free_ptrs-- - 1]; \
+         /* clean up after the last owner */ \
+         memset(ptr, 0, sizeof(item_type)); \
+      } else { \
+         ptr = &page->values[page->next_unused_index++]; \
+      } \
+      \
+      /* if this page is now full, then move it to the full list */ \
+      if (page->num_free_ptrs == 0 && page->next_unused_index == items_per_page) { \
+         first_open = page->next_page; \
+         page->next_page = first_full; \
+         first_full = page; \
+      } \
+      \
+      return ptr; \
    }
-   
-   /* if there's anything in the free list, then use that first because recycling is cool.  if not, then press
-      into service one of the slots that hasn't been used before. */
-   if (page->num_free_ptrs > 0) {
-      /* remove it from the free list */
-      ptr = page->free_ptrs[page->num_free_ptrs-- - 1];
-      /* clean up after the last owner */
-      memset(ptr, 0, sizeof(SdValue));
-   } else {
-      ptr = &page->values[page->next_unused_index++];
-   }
-   
-   /* if this page is now full, then move it to the full list */
-   if (page->num_free_ptrs == 0 && page->next_unused_index == SdValuePage_VALUES_PER_PAGE) {
-      SdValuePage_FirstOpen = page->next_page;
-      page->next_page = SdValuePage_FirstFull;
-      SdValuePage_FirstFull = page;
-   }
-   
-   return ptr;
-}
 
-static void SdFreeValue(SdValue* x) {
-   SdValuePage_r page = NULL, prev_page = NULL;
-   SdBool page_was_full = SdFalse;
-   
-   if (!x)
-      return;
 
-   /* figure out which page this value belongs to */
-   page = SdValuePage_FirstOpen;
-   while (page) {
-      if (x >= &page->values[0] && x < &page->values[SdValuePage_VALUES_PER_PAGE])
-         break; /* it's on this page */
-      prev_page = page;
-      page = page->next_page;
+SdSlabAllocator_DEFINE_ALLOC_FUNC(
+   SdAllocValue, SdValuePage, SdValue, SdValuePage_FirstOpen, SdValuePage_FirstFull, SdValuePage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_ALLOC_FUNC(
+   SdAllocList, SdListPage, SdList, SdListPage_FirstOpen, SdListPage_FirstFull, SdListPage_ITEMS_PER_PAGE)
+
+#undef SdSlabAllocator_DEFINE_ALLOC_FUNC
+
+#define SdSlabAllocator_DEFINE_FREE_FUNC(name, page_type, item_type, first_open, first_full, items_per_page) \
+   static void name(item_type* x) { \
+      page_type* page = NULL; \
+      page_type* prev_page = NULL; \
+      SdBool page_was_full = SdFalse; \
+      \
+      if (!x) \
+         return; \
+      \
+      /* figure out which page this value belongs to */ \
+      page = first_open; \
+      while (page) { \
+         if (x >= &page->values[0] && x < &page->values[items_per_page]) \
+            break; /* it's on this page */ \
+         prev_page = page; \
+         page = page->next_page; \
+      } \
+      \
+      if (!page) { \
+         prev_page = NULL; \
+         page = first_full; \
+         while (page) { \
+            if (x >= &page->values[0] && x < &page->values[items_per_page]) { \
+               page_was_full = SdTrue; \
+               break; /* it's on this page */ \
+            } \
+            prev_page = page; \
+            page = page->next_page; \
+         } \
+      } \
+      \
+      if (!page) { \
+         SdExit("Attempt to free a bogus pointer."); \
+         return; \
+      } \
+      \
+      /* add to the free list in this page */ \
+      page->free_ptrs[page->num_free_ptrs++] = x; \
+      \
+      if (page_was_full) { \
+         /* if this page was full, then move it to the open list */ \
+         if (prev_page) \
+            prev_page->next_page = page->next_page; \
+         else \
+            first_full = page->next_page; \
+         page->next_page = first_open; \
+         first_open = page; \
+      } else if (page->num_free_ptrs >= items_per_page) { \
+         /* if this page was open and is now empty, then we can remove this page */ \
+         if (prev_page) \
+            prev_page->next_page = page->next_page; \
+         else \
+            first_open = page->next_page; \
+         SdFree(page); \
+      } \
    }
-   
-   if (!page) {
-      prev_page = NULL;
-      page = SdValuePage_FirstFull;
-      while (page) {
-         if (x >= &page->values[0] && x < &page->values[SdValuePage_VALUES_PER_PAGE]) {
-            page_was_full = SdTrue;
-            break; /* it's on this page */
-         }
-         prev_page = page;
-         page = page->next_page;
-      }
-   }
-   
-   if (!page) {
-      SdExit("Attempt to free a bogus pointer.");
-      return;
-   }
-   
-   /* add to the free list in this page */
-   page->free_ptrs[page->num_free_ptrs++] = x;
-   
-   if (page_was_full) {
-      /* if this page was full, then move it to the open list */
-      if (prev_page)
-         prev_page->next_page = page->next_page;
-      else
-         SdValuePage_FirstFull = page->next_page;
-      page->next_page = SdValuePage_FirstOpen;
-      SdValuePage_FirstOpen = page;
-   } else if (page->num_free_ptrs >= SdValuePage_VALUES_PER_PAGE) {
-      /* if this page was open and is now empty, then we can remove this page */
-      if (prev_page)
-         prev_page->next_page = page->next_page;
-      else
-         SdValuePage_FirstOpen = page->next_page;
-      SdFree(page);
-   }
-}
+
+SdSlabAllocator_DEFINE_FREE_FUNC(
+   SdFreeValue, SdValuePage, SdValue, SdValuePage_FirstOpen, SdValuePage_FirstFull, SdValuePage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_FREE_FUNC(
+   SdFreeList, SdListPage, SdList, SdListPage_FirstOpen, SdListPage_FirstFull, SdListPage_ITEMS_PER_PAGE)
+
+#undef SdSlabAllocator_DEFINE_FREE_FUNC
 
 /* SdResult **********************************************************************************************************/
 SdResult SdFail(SdErr code, const char* message) {
@@ -776,7 +811,6 @@ size_t SdStringBuf_Length(SdStringBuf_r self) {
 
 /* SdValue ***********************************************************************************************************/
 SdValue* SdValue_NewNil(void) {
-   /*return SdAlloc(sizeof(SdValue));*/
    return SdAllocValue();
 }
 
@@ -865,7 +899,6 @@ void SdValue_Delete(SdValue* self) {
       default:
          break; /* nothing to free for these types */
    }
-   /*SdFree(self);*/
    SdFreeValue(self);
 }
 
@@ -1024,13 +1057,13 @@ void SdValue_SetGcMark(SdValue_r self, SdBool mark) {
 
 /* SdList ************************************************************************************************************/
 SdList* SdList_New(void) {
-   return SdAlloc(sizeof(SdList));
+   return SdAllocList();
 }
 
 SdList* SdList_NewWithLength(size_t length) {
    SdList* list = NULL;
    
-   list = SdAlloc(sizeof(SdList));
+   list = SdAllocList();
    if (length > 0) {
       size_t i = 0;
 
@@ -1045,7 +1078,7 @@ SdList* SdList_NewWithLength(size_t length) {
 void SdList_Delete(SdList* self) {
    SdAssert(self);
    SdFree(self->values);
-   SdFree(self);
+   SdFreeList(self);
 }
 
 void SdList_Append(SdList_r self, SdValue_r item) {
