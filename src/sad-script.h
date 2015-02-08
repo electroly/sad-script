@@ -90,6 +90,9 @@ typedef enum SdErr_e {
 } SdErr;
 
 typedef enum SdType_e {
+   /* values which have been deleted have this type */
+   SdType_FREED = -1,
+   
    /* These numeric values are used by (get-type) and must not change. */
    SdType_NIL = 0,
    SdType_INT = 1,

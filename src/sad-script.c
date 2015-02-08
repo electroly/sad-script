@@ -156,6 +156,9 @@ static void* SdUnreferenced(void* x);
 static void SdExit(const char* message);
 static const char* SdType_Name(SdType x);
 
+static SdValue* SdAllocValue(void);
+static void SdFreeValue(SdValue* x);
+
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
 static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item);
@@ -427,6 +430,105 @@ static const char* SdType_Name(SdType x) {
    }
 }
 
+/* SdValue Allocator *************************************************************************************************/
+#define SdValuePage_VALUES_PER_PAGE 37000
+   /* must not exceed the maximum for an unsigned short */
+
+typedef struct SdValuePage_s SdValuePage;
+typedef struct SdValuePage_s* SdValuePage_r;
+
+struct SdValuePage_s {
+   SdValue values[SdValuePage_VALUES_PER_PAGE];
+   SdValuePage* next_page;
+   unsigned short next_unused_index;
+   unsigned short free_indices[SdValuePage_VALUES_PER_PAGE];
+   unsigned short num_free_indices;
+};
+
+static SdValuePage* SdValuePage_First = NULL;
+
+static SdValue* SdAllocValue(void) {
+   SdValuePage_r page = NULL;
+   unsigned short index = 0;
+   
+   /* just in case, in debug builds makes sure we don't pick a number for VALUES_PER_PAGE which would overflow the
+      unsigned short variable we're using to store indices in the free list */
+   SdAssert((int)pow(2, 8 * sizeof(short)) > SdValuePage_VALUES_PER_PAGE);
+   
+   /* find a page with a slot free */
+   page = SdValuePage_First;
+   while (page) {
+      if (page->next_unused_index < SdValuePage_VALUES_PER_PAGE)
+         break; /* this page has room for more */
+      page = page->next_page;
+   }
+   
+   /* if there's no room in any existing pages, then create a new page */
+   if (!page) {
+      page = SdAlloc(sizeof(SdValuePage));
+      page->next_page = SdValuePage_First;
+      SdValuePage_First = page;
+   }
+   
+   /* if there's anything in the free list, then use that first because recycling is cool.  if not, then press
+      into service one of the slots that hasn't been used before. */
+   if (page->num_free_indices > 0) {
+      /* remove it from the free list */
+      index = page->free_indices[page->num_free_indices-- - 1];
+   } else {
+      index = page->next_unused_index++;
+   }
+   
+   return &page->values[index];
+}
+
+static void SdFreeValue(SdValue* x) {
+   SdValuePage_r page = NULL, prev_page = NULL;
+   unsigned short index = 0;
+   
+   if (!x)
+      return;
+
+   SdAssert(x->type != SdType_FREED);
+   
+   memset(x, 0, sizeof(SdValue));
+   x->type = SdType_FREED;
+
+   /* figure out which page this value belongs to */
+   page = SdValuePage_First;
+   while (page) {
+      if (x >= &page->values[0] && x < &page->values[SdValuePage_VALUES_PER_PAGE])
+         break; /* it's on this page */
+      prev_page = page;
+      page = page->next_page;
+   }
+
+   /*debug*/
+   if (!page) {
+      size_t num_pages = 0;
+      page = SdValuePage_First;
+      while (page) {
+         num_pages++;
+         page = page->next_page;
+      }
+      printf("Num pages: %lu\n", num_pages);
+   }
+   SdAssert(page);
+   
+   /* add to the free list in this page */
+   index = (unsigned short)(((char*)x - (char*)page->values) / sizeof(SdValue));
+   page->free_indices[page->num_free_indices++] = index;
+   
+   /* if all values on this page have been freed, then we can remove this page */
+   if (page->next_unused_index >= SdValuePage_VALUES_PER_PAGE) {
+      if (prev_page)
+         prev_page->next_page = page->next_page;
+      else
+         SdValuePage_First = page->next_page;
+      SdFree(page);
+   }
+}
+
 /* SdResult **********************************************************************************************************/
 SdResult SdFail(SdErr code, const char* message) {
    SdResult err;
@@ -668,25 +770,26 @@ size_t SdStringBuf_Length(SdStringBuf_r self) {
 
 /* SdValue ***********************************************************************************************************/
 SdValue* SdValue_NewNil(void) {
-   return SdAlloc(sizeof(SdValue));
+   /*return SdAlloc(sizeof(SdValue));*/
+   return SdAllocValue();
 }
 
 SdValue* SdValue_NewInt(int x) {
-   SdValue* value = SdAlloc(sizeof(SdValue));
+   SdValue* value = SdAllocValue();
    value->type = SdType_INT;
    value->payload.int_value = x;
    return value;
 }
 
 SdValue* SdValue_NewDouble(double x) {
-   SdValue* value = SdAlloc(sizeof(SdValue));
+   SdValue* value = SdAllocValue();
    value->type = SdType_DOUBLE;
    value->payload.double_value = x;
    return value;
 }
 
 SdValue* SdValue_NewBool(SdBool x) {
-   SdValue* value = SdAlloc(sizeof(SdValue));
+   SdValue* value = SdAllocValue();
    value->type = SdType_BOOL;
    value->payload.bool_value = x;
    return value;
@@ -696,7 +799,7 @@ SdValue* SdValue_NewString(SdString* x) {
    SdValue* value = NULL;
 
    SdAssert(x);
-   value = SdAlloc(sizeof(SdValue));
+   value = SdAllocValue();
    value->type = SdType_STRING;
    value->payload.string_value = x;
 
@@ -712,7 +815,7 @@ SdValue* SdValue_NewList(SdList* x) {
    SdValue* value = NULL;
 
    SdAssert(x);
-   value = SdAlloc(sizeof(SdValue));
+   value = SdAllocValue();
    value->type = SdType_LIST;
    value->payload.list_value = x;
 
@@ -756,7 +859,8 @@ void SdValue_Delete(SdValue* self) {
       default:
          break; /* nothing to free for these types */
    }
-   SdFree(self);
+   /*SdFree(self);*/
+   SdFreeValue(self);
 }
 
 SdType SdValue_Type(SdValue_r self) {
@@ -838,6 +942,7 @@ int SdValue_Hash(SdValue_r self) {
 
    SdAssert(self);
    switch (SdValue_Type(self)) {
+      case SdType_FREED:
       case SdType_ANY:
       case SdType_NIL:
          hash = 0;
