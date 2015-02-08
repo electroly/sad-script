@@ -160,7 +160,7 @@ static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
 static SdBool SdEnv_InsertByName(SdList_r list, SdValue_r item);
 static void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root);
-static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame);
+static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame, int* out_index_in_frame);
 
 static SdValue_r SdAst_NodeValue(SdValue_r node, size_t value_index);
 static SdValue_r SdAst_NewNode(SdEnv_r env, SdValue_r values[], size_t num_values);
@@ -1372,36 +1372,52 @@ SdResult SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue
 }
 
 SdValue_r SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse) {
+   int frame_hops = 0, index_in_frame = 0;
+   return SdEnv_FindVariableSlotLocation(self, frame, name, traverse, &frame_hops, &index_in_frame);
+}
+
+SdValue_r SdEnv_FindVariableSlotLocation(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse, 
+   int* out_frame_hops, int* out_index_in_frame) {
    SdValue_r value = NULL;
+   int frame_hops = 0, index_in_frame = 0;
 
    SdUnreferenced(self);
    SdAssert(self);
    SdAssert(frame);
    SdAssert(name);
+   SdAssert(out_frame_hops);
+   SdAssert(out_index_in_frame);
    while (SdValue_Type(frame) != SdType_NIL) {
-      value = SdEnv_FindVariableSlotInFrame(name, frame);
-      if (value)
+      value = SdEnv_FindVariableSlotInFrame(name, frame, &index_in_frame);
+      if (value) {
+         *out_frame_hops = frame_hops;
+         *out_index_in_frame = index_in_frame;
          return value;
+      }
 
-      if (traverse)
+      if (traverse) {
          frame = SdEnv_Frame_Parent(frame);
-      else
+         frame_hops++;
+      } else {
          break;
+      }
    }
 
    return NULL;
 }
 
-static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame) {
+static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame, int* out_index_in_frame) {
    SdList_r slots = NULL;
    SdSearchResult search_result = { 0, SdFalse };
 
    SdAssert(name);
    SdAssert(frame);
+   SdAssert(out_index_in_frame);
    slots = SdEnv_Frame_VariableSlots(frame);
    search_result = SdEnv_BinarySearchByName(slots, name);
    if (search_result.exact) {
       SdValue_r slot = SdList_GetAt(slots, search_result.index);
+      *out_index_in_frame = (int)search_result.index;
       return slot;
    } else {
       return NULL;
@@ -1969,9 +1985,27 @@ SdValue_r SdAst_VarRef_New(SdEnv_r env, SdString* identifier) {
    SdAssertNonEmptyString(identifier);
 
    SdAst_STRING(identifier)
+   SdAst_NIL()
+   SdAst_NIL()
    SdAst_END
 }
 SdAst_STRING_GETTER(SdAst_VarRef_Identifier, SdNodeType_VAR_REF, 1)
+SdAst_VALUE_GETTER(SdAst_VarRef_FrameHops, SdNodeType_VAR_REF, 2)
+SdAst_VALUE_GETTER(SdAst_VarRef_IndexInFrame, SdNodeType_VAR_REF, 3)
+
+void SdAst_VarRef_SetFrameHops(SdEnv_r env, SdValue_r self, int frame_hops) {
+   SdAssertNode(self, SdNodeType_VAR_REF);
+   SdAssert(frame_hops >= 0);
+
+   SdList_SetAt(SdValue_GetList(self), 2, SdEnv_BoxInt(env, frame_hops));
+}
+
+void SdAst_VarRef_SetIndexInFrame(SdEnv_r env, SdValue_r self, int index_in_frame) {
+   SdAssertNode(self, SdNodeType_VAR_REF);
+   SdAssert(index_in_frame >= 0);
+
+   SdList_SetAt(SdValue_GetList(self), 3, SdEnv_BoxInt(env, index_in_frame));
+}
 
 SdValue_r SdAst_Match_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_expr) {
    SdAst_BEGIN(SdNodeType_MATCH)
@@ -3941,7 +3975,7 @@ static SdResult SdEngine_EvaluateExpr(SdEngine_r self, SdValue_r frame, SdValue_
 
 static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdValue_r* out_value) {
    SdString_r identifier = NULL;
-   SdValue_r slot = NULL;
+   SdValue_r slot = NULL, frame_hops_val = NULL, index_in_frame_val = NULL;
 
    SdAssert(self);
    SdAssert(frame);
@@ -3951,9 +3985,46 @@ static SdResult SdEngine_EvaluateVarRef(SdEngine_r self, SdValue_r frame, SdValu
    SdAssert(SdAst_NodeType(var_ref) == SdNodeType_VAR_REF);
 
    identifier = SdAst_VarRef_Identifier(var_ref);
-   slot = SdEnv_FindVariableSlot(self->env, frame, identifier, SdTrue);
-   if (!slot)
-      return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", identifier);
+
+   /* we can skip the search if this variable reference contains the binding information */
+   frame_hops_val = SdAst_VarRef_FrameHops(var_ref);
+   index_in_frame_val = SdAst_VarRef_IndexInFrame(var_ref);
+   if (SdValue_Type(frame_hops_val) == SdType_INT && SdValue_Type(index_in_frame_val) == SdType_INT) {
+      int i = 0, frame_hops = 0, index_in_frame = 0;
+      SdValue_r bound_frame = NULL;
+      SdList_r slots = NULL;
+      SdString_r slot_name = NULL;
+
+      frame_hops = SdValue_GetInt(frame_hops_val);
+      index_in_frame = SdValue_GetInt(index_in_frame_val);
+      SdAssert(frame_hops >= 0);
+      SdAssert(index_in_frame >= 0);
+
+      bound_frame = frame;
+      for (i = 0; i < frame_hops; i++) {
+         SdAssert(bound_frame);
+         bound_frame = SdEnv_Frame_Parent(bound_frame);
+      }
+
+      slots = SdEnv_Frame_VariableSlots(bound_frame);
+      SdAssert(index_in_frame < (int)SdList_Count(slots));
+      slot = SdList_GetAt(slots, index_in_frame);
+      slot_name = SdEnv_VariableSlot_Name(slot);
+      if (!SdString_Equals(slot_name, identifier))
+         slot = NULL;
+   } 
+   
+   if (!slot) {
+      int frame_hops = 0, index_in_frame = 0;
+
+      slot = SdEnv_FindVariableSlotLocation(self->env, frame, identifier, SdTrue, &frame_hops, &index_in_frame);
+      if (!slot)
+         return SdFailWithStringSuffix(SdErr_UNDECLARED_VARIABLE, "Undeclared variable: ", identifier);
+
+      SdAst_VarRef_SetFrameHops(self->env, var_ref, frame_hops);
+      SdAst_VarRef_SetIndexInFrame(self->env, var_ref, index_in_frame);
+   }
+   
    *out_value = SdEnv_VariableSlot_Value(slot);
    return SdResult_SUCCESS;
 }
@@ -4063,7 +4134,7 @@ end:
 static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r body, SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdList_r statements = NULL;
-   SdValue_r statement = NULL;
+   SdValue_r statement = NULL, body_frame = NULL;
    size_t i = 0, count = 0;
 
    SdAssert(self);
@@ -4074,16 +4145,20 @@ static SdResult SdEngine_ExecuteBody(SdEngine_r self, SdValue_r frame, SdValue_r
    SdAssert(SdAst_NodeType(body) == SdNodeType_BODY);
 
    statements = SdAst_Body_Statements(body);
+   body_frame = SdEnv_BeginFrame(self->env, frame);
+
    count = SdList_Count(statements);
    for (i = 0; i < count; i++) {
       statement = SdList_GetAt(statements, i);
       *out_return = NULL;
       if (SdFailed(result = SdEngine_ExecuteStatement(self, frame, statement, out_return)))
-         return result;
+         goto end;
       if (*out_return) /* a return statement breaks the body */
-         return result;
+         goto end;
    }
 
+end:
+   if (body_frame) SdEnv_EndFrame(self->env, body_frame);
    return result;
 }
 

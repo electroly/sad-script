@@ -317,6 +317,8 @@ SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
 void           SdEnv_CollectGarbage(SdEnv_r self);
 SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue_r value);
 SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
+SdValue_r      SdEnv_FindVariableSlotLocation(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse, 
+                  int* out_frame_hops, int* out_index_in_frame); /* may be null */
 unsigned long  SdEnv_AllocationCount(SdEnv_r self);
 SdValue_r      SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent);
 void           SdEnv_EndFrame(SdEnv_r self, SdValue_r frame);
@@ -365,43 +367,43 @@ SdValue_r      SdEnv_CallTrace_Arguments(SdValue_r self);
 SdValue_r      SdEnv_CallTrace_CallingFrame(SdValue_r self);
 
 /* SdAst **************************************************************************************************************
-               0       |    1                    |    2                |    3          |    4          |    5
-   Program: -----------+-------------------------+---------------------+---------------+---------------|---------------
-      (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |               |               |
-   Function: ----------+-------------------------+---------------------+---------------+---------------|---------------
-      (list FUNCTION   | name:Str                | params:Lst<Str>     | Body          | imported:Bool | var-args:Bool)
-   Statement: ---------+-------------------------+---------------------+---------------+---------------|---------------
-      (list CALL       | function-name:Str       | args:Lst<Expr>)     |               |               | 
-      (list VAR        | variable-name:Str       | value:Expr)         |               |               | 
-      (list SET        | variable-name:Str       | value:Expr)         |               |               | 
-      (list MULTI_VAR  | variable-names:Lst<Str> | value:Expr)         |               |               | 
-      (list MULTI_SET  | variable-names:Lst<Str> | value:Expr)         |               |               | 
-      (list IF         | condition:Expr          | if-true:Body        | Lst<ElseIf>   | else:Body)    | 
-      (list FOR        | variable-name:Str       | start:Expr          | stop:Expr     | Body)         | 
-      (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr | Body)         | 
-      (list WHILE      | condition:Expr          | Body)               |               |               | 
-      (list DO         | condition:Expr          | Body)               |               |               | 
-      (list SWITCH     | Lst<Expr>               | Lst<SwitchCase>     | default:Body) |               | 
-      (list RETURN     | Expr)                   |                     |               |               | 
-      (list DIE        | Expr)                   |                     |               |               | 
-   ElseIf: ------------+-------------------------+---------------------+---------------+---------------|---------------
-      (list ELSEIF     | condition:Expr          | Body)               |               |               | 
-   SwitchCase: --------+-------------------------+---------------------+---------------+---------------|---------------
-      (list SWITCH_CASE| Lst<Expr>               | Body)               |               |               | 
-   Expr: --------------+-------------------------+---------------------+---------------+---------------|---------------
-      (list INT_LIT    | Int)                    |                     |               |               | 
-      (list DOUBLE_LIT | Double)                 |                     |               |               | 
-      (list BOOL_LIT   | Bool)                   |                     |               |               | 
-      (list STRING_LIT | Str)                    |                     |               |               | 
-      (list NIL_LIT)   |                         |                     |               |               | 
-      (list VAR_REF    | identifier:Str)         |                     |               |               | 
-      (list MATCH      | Lst<Expr>               | Lst<MatchCase>      | default:Expr) |               | 
-      (list CALL ^     | ...                     |                     |               |               | 
-      (list FUNCTION ^ | ...                     |                     |               |               | 
-   MatchCase: ---------+-------------------------+---------------------+---------------+---------------|---------------
-      (list MATCH_CASE | Lst<Expr>               | Expr)               |               |               | 
-   Body: --------------+-------------------------+---------------------+---------------+---------------|---------------
-      (list BODY       | Lst<Statement>)         |                     |               |               | 
+               0       |    1                    |    2                |    3                 |    4          |    5
+   Program: -----------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |                      |               |
+   Function: ----------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list FUNCTION   | name:Str                | params:Lst<Str>     | Body                 | imported:Bool | var-args:Bool)
+   Statement: ---------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list CALL       | function-name:Str       | args:Lst<Expr>)     |                      |               | 
+      (list VAR        | variable-name:Str       | value:Expr)         |                      |               | 
+      (list SET        | variable-name:Str       | value:Expr)         |                      |               | 
+      (list MULTI_VAR  | variable-names:Lst<Str> | value:Expr)         |                      |               | 
+      (list MULTI_SET  | variable-names:Lst<Str> | value:Expr)         |                      |               | 
+      (list IF         | condition:Expr          | if-true:Body        | Lst<ElseIf>          | else:Body)    | 
+      (list FOR        | variable-name:Str       | start:Expr          | stop:Expr            | Body)         | 
+      (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr        | Body)         | 
+      (list WHILE      | condition:Expr          | Body)               |                      |               | 
+      (list DO         | condition:Expr          | Body)               |                      |               | 
+      (list SWITCH     | Lst<Expr>               | Lst<SwitchCase>     | default:Body)        |               | 
+      (list RETURN     | Expr)                   |                     |                      |               | 
+      (list DIE        | Expr)                   |                     |                      |               | 
+   ElseIf: ------------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list ELSEIF     | condition:Expr          | Body)               |                      |               | 
+   SwitchCase: --------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list SWITCH_CASE| Lst<Expr>               | Body)               |                      |               | 
+   Expr: --------------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list INT_LIT    | Int)                    |                     |                      |               | 
+      (list DOUBLE_LIT | Double)                 |                     |                      |               | 
+      (list BOOL_LIT   | Bool)                   |                     |                      |               | 
+      (list STRING_LIT | Str)                    |                     |                      |               | 
+      (list NIL_LIT)   |                         |                     |                      |               | 
+      (list VAR_REF    | identifier:Str          | frame-hops:Int?     | index-in-frame :Int?)|               | 
+      (list MATCH      | Lst<Expr>               | Lst<MatchCase>      | default:Expr)        |               | 
+      (list CALL ^     | ...                     |                     |                      |               | 
+      (list FUNCTION ^ | ...                     |                     |                      |               | 
+   MatchCase: ---------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list MATCH_CASE | Lst<Expr>               | Expr)               |                      |               | 
+   Body: --------------+-------------------------+---------------------+----------------------+---------------|---------------
+      (list BODY       | Lst<Statement>)         |                     |                      |               | 
 */
 SdNodeType     SdAst_NodeType(SdValue_r node);
 
@@ -504,6 +506,10 @@ SdValue_r      SdAst_NilLit_New(SdEnv_r env);
 
 SdValue_r      SdAst_VarRef_New(SdEnv_r env, SdString* identifier);
 SdString_r     SdAst_VarRef_Identifier(SdValue_r self);
+SdValue_r      SdAst_VarRef_FrameHops(SdValue_r self);
+void           SdAst_VarRef_SetFrameHops(SdEnv_r env, SdValue_r self, int frame_hops);
+SdValue_r      SdAst_VarRef_IndexInFrame(SdValue_r self);
+void           SdAst_VarRef_SetIndexInFrame(SdEnv_r env, SdValue_r self, int index_in_frame);
 
 SdValue_r      SdAst_Match_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_expr);
 SdList_r       SdAst_Match_Exprs(SdValue_r self);
