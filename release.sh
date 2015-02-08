@@ -4,10 +4,12 @@ rm -f release/*
 make EXTRAFLAGS=-DNDEBUG clean all test
 rm -rf /tmp/sad-script
 mkdir /tmp/sad-script
+mkdir /tmp/sad-script/tests
 cp src/sad-script.c /tmp/sad-script/
 cp src/sad-script.h /tmp/sad-script/
 cp bin/sad.exe /tmp/sad-script/
 cp bin/prelude.sad /tmp/sad-script/
+cp tests/*.sad /tmp/sad-script/tests/
 pushd /tmp/
 zip -r sad-script.zip sad-script/
 popd
