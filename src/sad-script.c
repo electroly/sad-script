@@ -1409,16 +1409,9 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
    
    old_count = self->count;
    old_values = self->values;
-   if (old_count == 1) {
-      SdFree1ElementArray(self->values.array_1);
-      old_value = self->values.array_1->elements[0];
-      self->values.array_n = NULL;
-      return old_value;
-   }
-   
-   /* old_count == 0 and old_count == 1 are special cases and have been handled at this point */
 
    switch (old_count) {
+      case 1: old_elements = self->values.array_1->elements; break;
       case 2: old_elements = self->values.array_2->elements; break;
       case 3: old_elements = self->values.array_3->elements; break;
       case 4: old_elements = self->values.array_4->elements; break;
@@ -1431,6 +1424,9 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
    }
    
    switch (old_count) {
+      case 1:
+         self->values.array_n = NULL;
+         break;
       case 2:
          self->values.array_1 = SdAlloc1ElementArray();
          elements = self->values.array_1->elements;
@@ -1463,10 +1459,13 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
    }
 
    switch (old_count) {
+      case 1: SdFree1ElementArray(old_values.array_1); break;
       case 2: SdFree2ElementArray(old_values.array_2); break;
       case 3: SdFree3ElementArray(old_values.array_3); break;
       case 4: SdFree4ElementArray(old_values.array_4); break;
    }
+
+   self->count--;
    
    return old_value;
 }
