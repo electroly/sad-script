@@ -1468,6 +1468,7 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
       case 2: SdFree2ElementArray(old_values.array_2); break;
       case 3: SdFree3ElementArray(old_values.array_3); break;
       case 4: SdFree4ElementArray(old_values.array_4); break;
+      case 5: SdFree(old_values.array_n); break;
    }
 
    self->count--;
