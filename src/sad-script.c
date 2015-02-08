@@ -562,7 +562,7 @@ SdSlabAllocator_DEFINE_ALLOC_FUNC(
             first_full = page->next_page; \
          page->next_page = first_open; \
          first_open = page; \
-      } else if (page->num_free_ptrs >= items_per_page) { \
+      } else if (page->num_free_ptrs == page->next_unused_index) { \
          /* if this page was open and is now empty, then we can remove this page */ \
          if (prev_page) \
             prev_page->next_page = page->next_page; \
