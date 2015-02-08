@@ -420,10 +420,8 @@ void* SdRealloc(void* ptr, size_t new_size, size_t old_size) {
 
    /* If there is not enough available memory to expand the block to the given size, the original block is left 
       unchanged, and NULL is returned. */
-   if (!new_ptr) {
+   if (!new_ptr)
       SdExit("realloc failed.");
-      return NULL;
-   }
 
    if (new_ptr != ptr) {
       /* realloc had to allocate a new buffer, copy everything over, and then free the old buffer. */
