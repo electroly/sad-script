@@ -39,9 +39,11 @@ clean: cleantests
 	@rm -f bin/*
 
 test: cleantests testresults bin/sad bin/sad-test bin/prelude.sad $(TESTRESULTS)
+	@echo
 
 $(TESTRESULTS): 
-	-@$(SAD_RUN) --prelude src$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err
+	@echo -n .
+	@$(SAD_RUN) --prelude src$(SEP)prelude.sad $(subst /,$(SEP),$(@:testresults/%.testresult=tests/%.sad)) > $@ 2> $@.err || true
 	@cat $@.err >> $@
 	@rm $@.err
 	@$(SAD_TEST_RUN) $(@:testresults/%.testresult=tests/%.sad) $@
