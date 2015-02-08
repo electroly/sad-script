@@ -68,12 +68,32 @@
    /* 64-bit pages are 1,048,568 bytes. 32-bit pages are 1,048,572 bytes. */
 #define SdListPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 43689 : 90380)
    /* 64-bit pages are 1,048,560 bytes. 32-bit pages are 1,048,572 bytes. */
+#define Sd1ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
+#define Sd2ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
+#define Sd3ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
+#define Sd4ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
 
 /*********************************************************************************************************************/
 typedef struct SdValuePage_s SdValuePage;
 typedef struct SdValuePage_s* SdValuePage_r;
 typedef struct SdListPage_s SdListPage;
 typedef struct SdListPage_s* SdListPage_r;
+typedef struct Sd1ElementArray_s Sd1ElementArray;
+typedef struct Sd1ElementArray_s* Sd1ElementArray_r;
+typedef struct Sd2ElementArray_s Sd2ElementArray;
+typedef struct Sd2ElementArray_s* Sd2ElementArray_r;
+typedef struct Sd3ElementArray_s Sd3ElementArray;
+typedef struct Sd3ElementArray_s* Sd3ElementArray_r;
+typedef struct Sd4ElementArray_s Sd4ElementArray;
+typedef struct Sd4ElementArray_s* Sd4ElementArray_r;
+typedef struct Sd1ElementArrayPage_s Sd1ElementArrayPage;
+typedef struct Sd1ElementArrayPage_s* Sd1ElementArrayPage_r;
+typedef struct Sd2ElementArrayPage_s Sd2ElementArrayPage;
+typedef struct Sd2ElementArrayPage_s* Sd2ElementArrayPage_r;
+typedef struct Sd3ElementArrayPage_s Sd3ElementArrayPage;
+typedef struct Sd3ElementArrayPage_s* Sd3ElementArrayPage_r;
+typedef struct Sd4ElementArrayPage_s Sd4ElementArrayPage;
+typedef struct Sd4ElementArrayPage_s* Sd4ElementArrayPage_r;
 typedef struct SdScannerNode_s SdScannerNode;
 typedef struct SdScannerNode_s* SdScannerNode_r;
 
@@ -84,6 +104,14 @@ typedef union SdValueUnion_u {
    double double_value;
    SdList* list_value;
 } SdValueUnion;
+
+typedef union SdListValuesUnion_u {
+   Sd1ElementArray* array_1;
+   Sd2ElementArray* array_2;
+   Sd3ElementArray* array_3;
+   Sd4ElementArray* array_4;
+   SdValue_r* array_n;
+} SdListValuesUnion;
 
 struct Sad_s {
    SdEnv* env;
@@ -111,10 +139,26 @@ struct SdValue_s {
 
 struct SdList_s {
    size_t count;
-   SdValue_r* values;
+   SdListValuesUnion values;
 #if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdBool is_boxed; /* whether this list has been boxed already */
 #endif
+};
+
+struct Sd1ElementArray_s {
+   SdValue_r elements[1];
+};
+
+struct Sd2ElementArray_s {
+   SdValue_r elements[2];
+};
+
+struct Sd3ElementArray_s {
+   SdValue_r elements[3];
+};
+
+struct Sd4ElementArray_s {
+   SdValue_r elements[4];
 };
 
 struct SdEnv_s {
@@ -172,6 +216,10 @@ struct SdEngine_s {
 
 SdSlabAllocator_DEFINE_PAGE_STRUCT(SdValuePage_s, SdValue, SdValuePage_ITEMS_PER_PAGE);
 SdSlabAllocator_DEFINE_PAGE_STRUCT(SdListPage_s, SdList, SdListPage_ITEMS_PER_PAGE);
+SdSlabAllocator_DEFINE_PAGE_STRUCT(Sd1ElementArrayPage_s, Sd1ElementArray, Sd1ElementArrayPage_ITEMS_PER_PAGE);
+SdSlabAllocator_DEFINE_PAGE_STRUCT(Sd2ElementArrayPage_s, Sd2ElementArray, Sd2ElementArrayPage_ITEMS_PER_PAGE);
+SdSlabAllocator_DEFINE_PAGE_STRUCT(Sd3ElementArrayPage_s, Sd3ElementArray, Sd3ElementArrayPage_ITEMS_PER_PAGE);
+SdSlabAllocator_DEFINE_PAGE_STRUCT(Sd4ElementArrayPage_s, Sd4ElementArray, Sd4ElementArrayPage_ITEMS_PER_PAGE);
 
 #undef SdSlabAllocator_DEFINE_PAGE_STRUCT
 
@@ -184,6 +232,14 @@ static SdValue* SdAllocValue(void);
 static void SdFreeValue(SdValue* x);
 static SdList* SdAllocList(void);
 static void SdFreeList(SdList* x);
+static Sd1ElementArray* SdAlloc1ElementArray(void);
+static void SdFree1ElementArray(Sd1ElementArray* x);
+static Sd2ElementArray* SdAlloc2ElementArray(void);
+static void SdFree2ElementArray(Sd2ElementArray* x);
+static Sd3ElementArray* SdAlloc3ElementArray(void);
+static void SdFree3ElementArray(Sd3ElementArray* x);
+static Sd4ElementArray* SdAlloc4ElementArray(void);
+static void SdFree4ElementArray(Sd4ElementArray* x);
 
 static SdSearchResult SdEnv_BinarySearchByName(SdList_r list, SdString_r name);
 static int SdEnv_BinarySearchByName_CompareFunc(SdValue_r lhs, void* context);
@@ -316,6 +372,14 @@ static SdValuePage* SdValuePage_FirstOpen = NULL;
 static SdValuePage* SdValuePage_FirstFull = NULL;
 static SdListPage* SdListPage_FirstOpen = NULL;
 static SdListPage* SdListPage_FirstFull = NULL;
+static Sd1ElementArrayPage* Sd1ElementArrayPage_FirstOpen = NULL;
+static Sd1ElementArrayPage* Sd1ElementArrayPage_FirstFull = NULL;
+static Sd2ElementArrayPage* Sd2ElementArrayPage_FirstOpen = NULL;
+static Sd2ElementArrayPage* Sd2ElementArrayPage_FirstFull = NULL;
+static Sd3ElementArrayPage* Sd3ElementArrayPage_FirstOpen = NULL;
+static Sd3ElementArrayPage* Sd3ElementArrayPage_FirstFull = NULL;
+static Sd4ElementArrayPage* Sd4ElementArrayPage_FirstOpen = NULL;
+static Sd4ElementArrayPage* Sd4ElementArrayPage_FirstFull = NULL;
 static size_t SdAlloc_BytesAllocatedSinceLastGc = 0;
 
 /* Helpers ***********************************************************************************************************/
@@ -507,11 +571,22 @@ static const char* SdType_Name(SdType x) {
       return ptr; \
    }
 
-
 SdSlabAllocator_DEFINE_ALLOC_FUNC(
    SdAllocValue, SdValuePage, SdValue, SdValuePage_FirstOpen, SdValuePage_FirstFull, SdValuePage_ITEMS_PER_PAGE)
 SdSlabAllocator_DEFINE_ALLOC_FUNC(
    SdAllocList, SdListPage, SdList, SdListPage_FirstOpen, SdListPage_FirstFull, SdListPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_ALLOC_FUNC(
+   SdAlloc1ElementArray, Sd1ElementArrayPage, Sd1ElementArray, Sd1ElementArrayPage_FirstOpen,
+   Sd1ElementArrayPage_FirstFull, Sd1ElementArrayPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_ALLOC_FUNC(
+   SdAlloc2ElementArray, Sd2ElementArrayPage, Sd2ElementArray, Sd2ElementArrayPage_FirstOpen,
+   Sd2ElementArrayPage_FirstFull, Sd2ElementArrayPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_ALLOC_FUNC(
+   SdAlloc3ElementArray, Sd3ElementArrayPage, Sd3ElementArray, Sd3ElementArrayPage_FirstOpen,
+   Sd3ElementArrayPage_FirstFull, Sd3ElementArrayPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_ALLOC_FUNC(
+   SdAlloc4ElementArray, Sd4ElementArrayPage, Sd4ElementArray, Sd4ElementArrayPage_FirstOpen,
+   Sd4ElementArrayPage_FirstFull, Sd4ElementArrayPage_ITEMS_PER_PAGE)
 
 #undef SdSlabAllocator_DEFINE_ALLOC_FUNC
 
@@ -576,6 +651,18 @@ SdSlabAllocator_DEFINE_FREE_FUNC(
    SdFreeValue, SdValuePage, SdValue, SdValuePage_FirstOpen, SdValuePage_FirstFull, SdValuePage_ITEMS_PER_PAGE)
 SdSlabAllocator_DEFINE_FREE_FUNC(
    SdFreeList, SdListPage, SdList, SdListPage_FirstOpen, SdListPage_FirstFull, SdListPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_FREE_FUNC(
+   SdFree1ElementArray, Sd1ElementArrayPage, Sd1ElementArray, Sd1ElementArrayPage_FirstOpen,
+   Sd1ElementArrayPage_FirstFull, Sd1ElementArrayPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_FREE_FUNC(
+   SdFree2ElementArray, Sd2ElementArrayPage, Sd2ElementArray, Sd2ElementArrayPage_FirstOpen,
+   Sd2ElementArrayPage_FirstFull, Sd2ElementArrayPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_FREE_FUNC(
+   SdFree3ElementArray, Sd3ElementArrayPage, Sd3ElementArray, Sd3ElementArrayPage_FirstOpen,
+   Sd3ElementArrayPage_FirstFull, Sd3ElementArrayPage_ITEMS_PER_PAGE)
+SdSlabAllocator_DEFINE_FREE_FUNC(
+   SdFree4ElementArray, Sd4ElementArrayPage, Sd4ElementArray, Sd4ElementArrayPage_FirstOpen,
+   Sd4ElementArrayPage_FirstFull, Sd4ElementArrayPage_ITEMS_PER_PAGE)
 
 #undef SdSlabAllocator_DEFINE_FREE_FUNC
 
@@ -1076,22 +1163,50 @@ SdList* SdList_New(void) {
 
 SdList* SdList_NewWithLength(size_t length) {
    SdList* list = NULL;
+   SdValue_r* elements = NULL;
+   size_t i = 0;
    
    list = SdAllocList();
-   if (length > 0) {
-      size_t i = 0;
-
+   if (length == 1) {
+      list->count = 1;
+      list->values.array_1 = SdAlloc1ElementArray();
+      elements = list->values.array_1->elements;
+   } else if (length == 2) {
+      list->count = 2;
+      list->values.array_2 = SdAlloc2ElementArray();
+      elements = list->values.array_2->elements;
+   } else if (length == 3) {
+      list->count = 3;
+      list->values.array_3 = SdAlloc3ElementArray();
+      elements = list->values.array_3->elements;
+   } else if (length == 4) {
+      list->count = 4;
+      list->values.array_4 = SdAlloc4ElementArray();
+      elements = list->values.array_4->elements;
+   } else if (length > 0) {
       list->count = length;
-      list->values = SdAlloc(length * sizeof(SdValue_r));
-      for (i = 0; i < length; i++)
-         list->values[i] = &SdValue_NIL;
+      list->values.array_n = SdAlloc(length * sizeof(SdValue_r));
+      elements = list->values.array_n;
    }
+   
+   for (i = 0; i < length; i++)
+      elements[i] = &SdValue_NIL;
+   
    return list;
 }
 
 void SdList_Delete(SdList* self) {
    SdAssert(self);
-   SdFree(self->values);
+   if (self->count == 1)
+      SdFree1ElementArray(self->values.array_1);
+   else if (self->count == 2)
+      SdFree2ElementArray(self->values.array_2);
+   else if (self->count == 3)
+      SdFree3ElementArray(self->values.array_3);
+   else if (self->count == 4)
+      SdFree4ElementArray(self->values.array_4);
+   else
+      SdFree(self->values.array_n);
    SdFreeList(self);
 }
 
@@ -1101,9 +1216,61 @@ void SdList_Append(SdList_r self, SdValue_r item) {
    SdAssert(self);
    SdAssert(item);
    new_count = self->count + 1;
-   self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r), self->count * sizeof(SdValue_r));
-   SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
-   self->values[new_count - 1] = item;
+
+   switch (self->count) {
+      case 0: {
+         Sd1ElementArray* array = SdAlloc1ElementArray();
+         array->elements[0] = item;
+         self->values.array_1 = array;
+         break;
+      }
+      case 1: {
+         Sd2ElementArray* array = SdAlloc2ElementArray();
+         array->elements[0] = self->values.array_1->elements[0];
+         array->elements[1] = item;
+         SdFree1ElementArray(self->values.array_1);
+         self->values.array_2 = array;
+         break;
+      }
+      case 2: {
+         Sd3ElementArray* array = SdAlloc3ElementArray();
+         array->elements[0] = self->values.array_2->elements[0];
+         array->elements[1] = self->values.array_2->elements[1];
+         array->elements[2] = item;
+         SdFree2ElementArray(self->values.array_2);
+         self->values.array_3 = array;
+         break;
+      }
+      case 3: {
+         Sd4ElementArray* array = SdAlloc4ElementArray();
+         array->elements[0] = self->values.array_3->elements[0];
+         array->elements[1] = self->values.array_3->elements[1];
+         array->elements[2] = self->values.array_3->elements[2];
+         array->elements[3] = item;
+         SdFree3ElementArray(self->values.array_3);
+         self->values.array_4 = array;
+         break;
+      }
+      case 4: {
+         SdValue_r* array = SdAlloc(5 * sizeof(SdValue_r));
+         array[0] = self->values.array_4->elements[0];
+         array[1] = self->values.array_4->elements[1];
+         array[2] = self->values.array_4->elements[2];
+         array[3] = self->values.array_4->elements[3];
+         array[4] = item;
+         SdFree4ElementArray(self->values.array_4);
+         self->values.array_n = array;
+         break;
+      }
+      default: {
+         self->values.array_n = SdRealloc(
+            self->values.array_n, new_count * sizeof(SdValue_r), self->count * sizeof(SdValue_r));
+         SdAssert(self->values.array_n); /* we're growing the list so SdRealloc() shouldn't return NULL. */
+         self->values.array_n[new_count - 1] = item;
+         break;
+      }
+   }
+   
    self->count = new_count;
 }
 
@@ -1111,29 +1278,117 @@ void SdList_SetAt(SdList_r self, size_t index, SdValue_r item) {
    SdAssert(self);
    SdAssert(item);
    SdAssert(index < self->count + 1);
-   self->values[index] = item;
+   
+   switch (self->count) {
+      case 1: self->values.array_1->elements[index] = item; break;
+      case 2: self->values.array_2->elements[index] = item; break;
+      case 3: self->values.array_3->elements[index] = item; break;
+      case 4: self->values.array_4->elements[index] = item; break;
+      default: self->values.array_n[index] = item; break;
+   }
 }
 
 void SdList_InsertAt(SdList_r self, size_t index, SdValue_r item) {
+   SdListValuesUnion old_values = { 0 };
+   SdValue_r* old_elements = NULL;
+   SdValue_r* elements = NULL;
+   size_t i = 0, old_count = 0;
+   SdBool is_new_buffer = SdFalse;
+   
    SdAssert(self);
    SdAssert(item);
    SdAssert(index <= self->count);
+   
    if (index == self->count) {
       SdList_Append(self, item);
-   } else {
-      size_t new_count = self->count + 1;
-      self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r), self->count * sizeof(SdValue_r));
-      SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
-      memmove(&self->values[index + 1], &self->values[index], sizeof(SdValue_r) * (self->count - index));
-      self->values[index] = item;
-      self->count = new_count;
+      return;
    }
+   
+   old_count = self->count;
+   old_values = self->values;
+   switch (old_count) {
+      case 1: old_elements = self->values.array_1->elements; break;
+      case 2: old_elements = self->values.array_2->elements; break;
+      case 3: old_elements = self->values.array_3->elements; break;
+      case 4: old_elements = self->values.array_4->elements; break;
+      default: old_elements = self->values.array_n; break;
+   }
+   
+   switch (old_count) {
+      case 0:
+         self->values.array_1 = SdAlloc1ElementArray();
+         elements = self->values.array_1->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 1:
+         self->values.array_2 = SdAlloc2ElementArray();
+         elements = self->values.array_2->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 2:
+         self->values.array_3 = SdAlloc3ElementArray();
+         elements = self->values.array_3->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 3:
+         self->values.array_4 = SdAlloc4ElementArray();
+         elements = self->values.array_4->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 4:
+         self->values.array_n = SdAlloc(5 * sizeof(SdValue_r));
+         elements = self->values.array_n;
+         is_new_buffer = SdTrue;
+         break;
+      default:
+         self->values.array_n = SdRealloc(
+            self->values.array_n, (old_count + 1) * sizeof(SdValue_r), old_count * sizeof(SdValue_r));
+         assert(self->values.array_n);
+         
+         for (i = old_count; i > index && i <= old_count; i--)
+            self->values.array_n[i] = self->values.array_n[i - 1];
+         self->values.array_n[index] = item;
+         break;
+   }
+   
+   if (is_new_buffer) {
+      switch (old_count) {
+         case 0:
+         case 1:
+         case 2:
+         case 3:
+         case 4:
+            for (i = 0; i < index; i++) {
+               elements[i] = old_elements[i];
+            }
+            elements[index] = item;
+            for (i = index; i < old_count; i++) {
+               elements[i + 1] = old_elements[i];
+            }
+            break;
+      }
+   }
+      
+   switch (old_count) {
+      case 1: SdFree1ElementArray(old_values.array_1); break;
+      case 2: SdFree2ElementArray(old_values.array_2); break;
+      case 3: SdFree3ElementArray(old_values.array_3); break;
+      case 4: SdFree4ElementArray(old_values.array_4); break;
+   }
+   
+   self->count++;
 }
 
 SdValue_r SdList_GetAt(SdList_r self, size_t index) {
    SdAssert(self);
    SdAssert(index < self->count);
-   return self->values[index];
+   switch (self->count) {
+      case 1: return self->values.array_1->elements[index];
+      case 2: return self->values.array_2->elements[index];
+      case 3: return self->values.array_3->elements[index];
+      case 4: return self->values.array_4->elements[index];
+      default: return self->values.array_n[index];
+   }
 }
 
 size_t SdList_Count(SdList_r self) {
@@ -1142,24 +1397,92 @@ size_t SdList_Count(SdList_r self) {
 }
 
 SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
-   size_t i = 0;
+   SdListValuesUnion old_values = { 0 };
    SdValue_r old_value = NULL;
-
+   SdValue_r* old_elements = NULL;
+   SdValue_r* elements = NULL;
+   size_t i = 0, old_count = 0;
+   SdBool is_new_buffer = SdFalse;
+   
    SdAssert(self);
    SdAssert(index < self->count);
-   old_value = SdList_GetAt(self, index);
-   for (i = index + 1; i < self->count; i++) {
-      self->values[i - 1] = self->values[i];
+   
+   old_count = self->count;
+   old_values = self->values;
+   if (old_count == 1) {
+      SdFree1ElementArray(self->values.array_1);
+      old_value = self->values.array_1->elements[0];
+      self->values.array_n = NULL;
+      return old_value;
    }
-   self->values[self->count - 1] = NULL;
-   self->count--;
+   
+   /* old_count == 0 and old_count == 1 are special cases and have been handled at this point */
+
+   switch (old_count) {
+      case 2: old_elements = self->values.array_2->elements; break;
+      case 3: old_elements = self->values.array_3->elements; break;
+      case 4: old_elements = self->values.array_4->elements; break;
+      default: old_elements = self->values.array_n; break;
+   }
+   
+   old_value = old_elements[index];
+   for (i = index; i < old_count - 1; i++) {
+      old_elements[i] = old_elements[i + 1];
+   }
+   
+   switch (old_count) {
+      case 2:
+         self->values.array_1 = SdAlloc1ElementArray();
+         elements = self->values.array_1->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 3:
+         self->values.array_2 = SdAlloc2ElementArray();
+         elements = self->values.array_2->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 4:
+         self->values.array_3 = SdAlloc3ElementArray();
+         elements = self->values.array_3->elements;
+         is_new_buffer = SdTrue;
+         break;
+      case 5:
+         self->values.array_4 = SdAlloc4ElementArray();
+         elements = self->values.array_4->elements;
+         is_new_buffer = SdTrue;
+         break;
+      default:
+         self->values.array_n = SdRealloc(
+            self->values.array_n, (old_count - 1) * sizeof(SdValue_r), old_count * sizeof(SdValue_r));
+         break;
+   }
+   
+   if (is_new_buffer) {
+      for (i = 0; i < old_count - 1; i++)
+         elements[i] = old_elements[i];
+   }
+
+   switch (old_count) {
+      case 2: SdFree2ElementArray(old_values.array_2); break;
+      case 3: SdFree3ElementArray(old_values.array_3); break;
+      case 4: SdFree4ElementArray(old_values.array_4); break;
+   }
+   
    return old_value;
 }
 
 void SdList_Clear(SdList_r self) {
    SdAssert(self);
-   SdFree(self->values);
-   self->values = NULL;
+   
+   switch (self->count) {
+      case 1: SdFree1ElementArray(self->values.array_1); break;
+      case 2: SdFree2ElementArray(self->values.array_2); break;
+      case 3: SdFree3ElementArray(self->values.array_3); break;
+      case 4: SdFree4ElementArray(self->values.array_4); break;
+      default: SdFree(self->values.array_n); break;
+   }
+   
+   self->values.array_n = NULL;
    self->count = 0;
 }
 
@@ -1238,10 +1561,13 @@ SdBool SdList_Equals(SdList_r a, SdList_r b) {
 }
 
 SdList* SdList_Clone(SdList_r self) {
-   SdList* clone = SdList_New();
-   clone->count = self->count;
-   clone->values = SdAlloc(sizeof(SdValue_r) * self->count);
-   memcpy(clone->values, self->values, sizeof(SdValue_r) * self->count);
+   SdList* clone = NULL;
+   size_t i = 0, count = 0;
+   
+   count = SdList_Count(self);
+   clone = SdList_NewWithLength(count);
+   for (i = 0; i < count; i++)
+      SdList_SetAt(clone, i, SdList_GetAt(self, i));
    return clone;
 }
 
