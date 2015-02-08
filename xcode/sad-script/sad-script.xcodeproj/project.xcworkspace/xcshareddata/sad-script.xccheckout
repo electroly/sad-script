@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IDESourceControlProjectFavoriteDictionaryKey</key>
+	<false/>
+	<key>IDESourceControlProjectIdentifier</key>
+	<string>46EBED79-6F57-4D58-8D27-41CABD9E8A6B</string>
+	<key>IDESourceControlProjectName</key>
+	<string>sad-script</string>
+	<key>IDESourceControlProjectOriginsDictionary</key>
+	<dict>
+		<key>47064478-3670-4AC3-AC38-DD75C59A8233</key>
+		<string>https://github.com/electroly/sad-script.git</string>
+	</dict>
+	<key>IDESourceControlProjectPath</key>
+	<string>xcode/sad-script/sad-script.xcodeproj/project.xcworkspace</string>
+	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
+	<dict>
+		<key>47064478-3670-4AC3-AC38-DD75C59A8233</key>
+		<string>../../../..</string>
+	</dict>
+	<key>IDESourceControlProjectURL</key>
+	<string>https://github.com/electroly/sad-script.git</string>
+	<key>IDESourceControlProjectVersion</key>
+	<integer>110</integer>
+	<key>IDESourceControlProjectWCCIdentifier</key>
+	<string>47064478-3670-4AC3-AC38-DD75C59A8233</string>
+	<key>IDESourceControlProjectWCConfigurations</key>
+	<array>
+		<dict>
+			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
+			<string>public.vcs.git</string>
+			<key>IDESourceControlWCCIdentifierKey</key>
+			<string>47064478-3670-4AC3-AC38-DD75C59A8233</string>
+			<key>IDESourceControlWCCName</key>
+			<string>sad-script</string>
+		</dict>
+	</array>
+</dict>
+</plist>
