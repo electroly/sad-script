@@ -58,8 +58,8 @@
 #pragma warning(disable: 4711) /* function '...' selected for automatic inline expansion */
 #endif
 
-#define SD_NUM_ALLOCATIONS_PER_GC 5000000
-   /* run the garbage collector after this many value allocations */
+/* run the garbage collector after we've allocated this many bytes since the last GC. 67108864 bytes = 64MB */
+#define SdEngine_ALLOCATED_BYTES_PER_GC 67108864
 
 /* these constants define the number of item structs to fit on each page in the slab allocator. the values are chosen
    so that they yield pages that are just under 1MB. assuming that calloc rounds allocations up to the nearest power of
@@ -121,7 +121,6 @@ struct SdEnv_s {
    SdValue_r root; /* contains all living/connected objects */
    SdChain* values_chain; /* contains all objects that haven't been deleted yet */
    SdValueSet* active_frames; /* contains all currently active frames in the interpreter engine */
-   unsigned long allocation_count;
    SdChain* call_stack; /* information about each call in the call stack */
    SdChain* protected_values; /* internal interpreter values that we don't want to get GC'd right this moment */
 };
@@ -160,7 +159,6 @@ struct SdScanner_s {
 
 struct SdEngine_s {
    SdEnv_r env;
-   unsigned long last_gc; /* the value of SdEnv_AllocationCount last time the GC was run */
 };
 
 #define SdSlabAllocator_DEFINE_PAGE_STRUCT(struct_name, item_type, items_per_page) \
@@ -317,6 +315,7 @@ static SdValuePage* SdValuePage_FirstOpen = NULL;
 static SdValuePage* SdValuePage_FirstFull = NULL;
 static SdListPage* SdListPage_FirstOpen = NULL;
 static SdListPage* SdListPage_FirstFull = NULL;
+static size_t SdAlloc_BytesAllocatedSinceLastGc = 0;
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -392,25 +391,28 @@ void* SdAlloc(size_t size) {
 #if defined(SD_DEBUG_MEMUSE) || defined(SD_DEBUG_ALL)
    sd_num_allocs++;
 #endif
-
+   
    ptr = calloc(1, size);
    if (!ptr) {
       char buf[1000];
       sprintf(buf, "calloc(1, %u) failed (SdAlloc)", (unsigned int)size);
       SdExit(buf);
    }
+
+   SdAlloc_BytesAllocatedSinceLastGc += size;
+   
    return ptr;
 }
 
 #define SdFree(ptr) free((ptr))
 
-void* SdRealloc(void* ptr, size_t size) {
+void* SdRealloc(void* ptr, size_t new_size, size_t old_size) {
    void* new_ptr = NULL;
 
-   if (size == 0)
-      size = 1;
+   if (new_size == 0)
+      new_size = 1;
 
-   new_ptr = realloc(ptr, size);
+   new_ptr = realloc(ptr, new_size);
 
 #if defined(SD_DEBUG_MEMUSE) || defined(SD_DEBUG_ALL)
    sd_num_reallocs++;
@@ -418,9 +420,17 @@ void* SdRealloc(void* ptr, size_t size) {
 
    /* If there is not enough available memory to expand the block to the given size, the original block is left 
       unchanged, and NULL is returned. */
-   if (!new_ptr)
+   if (!new_ptr) {
       SdExit("realloc failed.");
+      return NULL;
+   }
 
+   if (new_ptr != ptr) {
+      /* realloc had to allocate a new buffer, copy everything over, and then free the old buffer. */
+      SdAlloc_BytesAllocatedSinceLastGc -= old_size;
+      SdAlloc_BytesAllocatedSinceLastGc += new_size;
+   }
+   
    return new_ptr;
 }
 
@@ -762,7 +772,7 @@ void SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix) {
    suffix_len = strlen(suffix);
    new_len = old_len + suffix_len;
 
-   self->str = SdRealloc(self->str, new_len + 1);
+   self->str = SdRealloc(self->str, new_len + 1, old_len + 1);
    SdAssert(self->str);
    memcpy(&self->str[old_len], suffix, suffix_len);
    self->str[new_len] = 0;
@@ -777,7 +787,7 @@ void SdStringBuf_AppendChar(SdStringBuf_r self, char ch) {
    old_len = self->len;
    new_len = old_len + 1;
 
-   self->str = SdRealloc(self->str, new_len + 1);
+   self->str = SdRealloc(self->str, new_len + 1, old_len + 1);
    SdAssert(self->str);
    self->str[old_len] = ch;
    self->str[new_len] = 0;
@@ -1087,7 +1097,7 @@ void SdList_Append(SdList_r self, SdValue_r item) {
    SdAssert(self);
    SdAssert(item);
    new_count = self->count + 1;
-   self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r));
+   self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r), self->count * sizeof(SdValue_r));
    SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
    self->values[new_count - 1] = item;
    self->count = new_count;
@@ -1108,7 +1118,7 @@ void SdList_InsertAt(SdList_r self, size_t index, SdValue_r item) {
       SdList_Append(self, item);
    } else {
       size_t new_count = self->count + 1;
-      self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r));
+      self->values = SdRealloc(self->values, new_count * sizeof(SdValue_r), self->count * sizeof(SdValue_r));
       SdAssert(self->values); /* we're growing the list so SdRealloc() shouldn't return NULL. */
       memmove(&self->values[index + 1], &self->values[index], sizeof(SdValue_r) * (self->count - index));
       self->values[index] = item;
@@ -1334,7 +1344,6 @@ SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
    } while (0);
 
    SdChain_Push(self->values_chain, value);
-   self->allocation_count++;
    return value;
 }
 #else
@@ -1343,7 +1352,6 @@ SdValue_r SdEnv_AddToGc(SdEnv_r self, SdValue* value) {
    SdAssert(value);
 
    SdChain_Push(self->values_chain, value);
-   self->allocation_count++;
    return value;
 }
 #endif
@@ -1621,11 +1629,6 @@ static SdValue_r SdEnv_FindVariableSlotInFrame(SdString_r name, SdValue_r frame,
    } else {
       return NULL;
    }
-}
-
-unsigned long SdEnv_AllocationCount(SdEnv_r self) {
-   SdAssert(self);
-   return self->allocation_count;
 }
 
 SdValue_r SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent) {
@@ -4100,12 +4103,11 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    /* when running the memory leak detection, collect garbage before every statement to fish for bugs */
    gc_needed = SdTrue;
 #else
-   /* run the garbage collector if necessary (more than SD_NUM_ALLOCATIONS_PER_GC allocations since the last GC) */
-   gc_needed = (SdEnv_AllocationCount(self->env) - self->last_gc) > SD_NUM_ALLOCATIONS_PER_GC;
+   gc_needed = SdAlloc_BytesAllocatedSinceLastGc > SdEngine_ALLOCATED_BYTES_PER_GC;
 #endif
    if (gc_needed) {
       SdEnv_CollectGarbage(self->env);
-      self->last_gc = SdEnv_AllocationCount(self->env);
+      SdAlloc_BytesAllocatedSinceLastGc = 0;
    }
 
    /* execute the function body using the frame we just constructed */

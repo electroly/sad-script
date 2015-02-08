@@ -320,7 +320,6 @@ SdValue_r      SdEnv_ResolveVarRefToSlot(SdEnv_r self, SdValue_r frame, SdValue_
 SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
 SdValue_r      SdEnv_FindVariableSlotLocation(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse, 
                   int* out_frame_hops, int* out_index_in_frame); /* may be null */
-unsigned long  SdEnv_AllocationCount(SdEnv_r self);
 SdValue_r      SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent);
 void           SdEnv_EndFrame(SdEnv_r self, SdValue_r frame);
 void           SdEnv_PushCall(SdEnv_r self, SdValue_r calling_frame, SdValue_r name, SdValue_r arguments);
