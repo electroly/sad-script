@@ -2,8 +2,8 @@
 
 CC=bcc32
 COMPILER=Borland C++
-CFLAGS=-q -Q -w -w! -w-8004 -w-8073 -A -tWC -v -O2 -IC:/Borland/BCC55/Include -nbin
-LFLAGS=-LC:/Borland/BCC55/Lib
+CFLAGS=-q -Q -w -w! -w-8004 -w-8073 -A -tWC -v -O2 -IC:/Borland/BCC55/Include -LC:/Borland/BCC55/Lib -nbin
+LFLAGS=
 SEP=/
 SAD_OUT_FLAG=-obin/sad
 SAD_TEST_OUT_FLAG=-obin/sad-test

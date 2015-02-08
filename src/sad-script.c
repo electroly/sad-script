@@ -508,8 +508,11 @@ static void SdFreeValue(SdValue* x) {
          page = page->next_page;
       }
    }
-
-   SdAssert(page);
+   
+   if (!page) {
+      SdExit("Attempt to free a bogus pointer.");
+      return;
+   }
    
    /* add to the free list in this page */
    page->free_ptrs[page->num_free_ptrs++] = x;
