@@ -58,20 +58,24 @@
 #pragma warning(disable: 4711) /* function '...' selected for automatic inline expansion */
 #endif
 
-/* run the garbage collector after we've allocated this many bytes since the last GC. 67108864 bytes = 64MB */
+/* run the garbage collector after we've allocated this many bytes since the last GC. 67,108,864 bytes = 64MB */
 #define SdEngine_ALLOCATED_BYTES_PER_GC 67108864
 
 /* these constants define the number of item structs to fit on each page in the slab allocator. the values are chosen
    so that they yield pages that are just under 1MB. assuming that calloc rounds allocations up to the nearest power of
-   two, this should waste very little memory. */
+   two, this should waste very little memory. 1,048,576 bytes = 1MB */
 #define SdValuePage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
    /* 64-bit pages are 1,048,568 bytes. 32-bit pages are 1,048,572 bytes. */
-#define SdListPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 43689 : 90380)
+#define SdListPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 43689 : 87380)
    /* 64-bit pages are 1,048,560 bytes. 32-bit pages are 1,048,572 bytes. */
-#define Sd1ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
-#define Sd2ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
-#define Sd3ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
-#define Sd4ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 52428)
+#define Sd1ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 65534 : 131070)
+   /* 64-bit pages are 1,048,568 bytes. 32-bit pages are 1,048,572 bytes. */
+#define Sd2ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 43689 : 87380)
+   /* 64-bit pages are 1,048,560 bytes. 32-bit pages are 1,048,572 bytes. */
+#define Sd3ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 32767 : 65535)
+   /* 64-bit pages are 1,048,568 bytes. 32-bit pages are 1,048,572 bytes. */
+#define Sd4ElementArrayPage_ITEMS_PER_PAGE (sizeof(void*) == 8 ? 26213 : 52428)
+   /* 64-bit pages are 1,048,544 bytes. 32-bit pages are 1,048,572 bytes. */
 
 /*********************************************************************************************************************/
 typedef struct SdValuePage_s SdValuePage;
@@ -734,6 +738,7 @@ Sad* Sad_New(void) {
    Sad* self = SdAlloc(sizeof(Sad));
    self->env = SdEnv_New();
    self->engine = SdEngine_New(self->env);
+   
    return self;
 }
 
