@@ -61,7 +61,12 @@
 #define SD_NUM_ALLOCATIONS_PER_GC 5000000
    /* run the garbage collector after this many value allocations */
 
+#define SdValuePage_VALUES_PER_PAGE 40000
+   /* number of SdValue structs to fit on each page in the slab allocator */
+
 /*********************************************************************************************************************/
+typedef struct SdValuePage_s SdValuePage;
+typedef struct SdValuePage_s* SdValuePage_r;
 typedef struct SdScannerNode_s SdScannerNode;
 typedef struct SdScannerNode_s* SdScannerNode_r;
 
@@ -95,6 +100,14 @@ struct SdValue_s {
    SdType type;
    SdValueUnion payload;
    SdBool gc_mark; /* used by the mark-and-sweep garbage collector */
+};
+
+struct SdValuePage_s {
+   SdValue values[SdValuePage_VALUES_PER_PAGE];
+   SdValuePage* next_page;
+   size_t next_unused_index;
+   SdValue* free_ptrs[SdValuePage_VALUES_PER_PAGE];
+   size_t num_free_ptrs;
 };
 
 struct SdList_s {
@@ -285,6 +298,8 @@ SdResult SdResult_SUCCESS = { SdErr_SUCCESS, { 0 }};
 static SdValue SdValue_NIL = { SdType_NIL, { 0 }, SdFalse };
 static SdValue SdValue_TRUE = { SdType_BOOL, { SdTrue }, SdFalse };
 static SdValue SdValue_FALSE = { SdType_BOOL, { SdFalse }, SdFalse };
+static SdValuePage* SdValuePage_FirstOpen = NULL;
+static SdValuePage* SdValuePage_FirstFull = NULL;
 
 /* Helpers ***********************************************************************************************************/
 #ifdef NDEBUG
@@ -431,100 +446,88 @@ static const char* SdType_Name(SdType x) {
 }
 
 /* SdValue Allocator *************************************************************************************************/
-#define SdValuePage_VALUES_PER_PAGE 37000
-   /* must not exceed the maximum for an unsigned short */
-
-typedef struct SdValuePage_s SdValuePage;
-typedef struct SdValuePage_s* SdValuePage_r;
-
-struct SdValuePage_s {
-   SdValue values[SdValuePage_VALUES_PER_PAGE];
-   SdValuePage* next_page;
-   unsigned short next_unused_index;
-   unsigned short free_indices[SdValuePage_VALUES_PER_PAGE];
-   unsigned short num_free_indices;
-};
-
-static SdValuePage* SdValuePage_First = NULL;
-
 static SdValue* SdAllocValue(void) {
    SdValuePage_r page = NULL;
-   unsigned short index = 0;
-   
-   /* just in case, in debug builds makes sure we don't pick a number for VALUES_PER_PAGE which would overflow the
-      unsigned short variable we're using to store indices in the free list */
-   SdAssert((int)pow(2, 8 * sizeof(short)) > SdValuePage_VALUES_PER_PAGE);
+   SdValue* ptr = NULL;
    
    /* find a page with a slot free */
-   page = SdValuePage_First;
-   while (page) {
-      if (page->next_unused_index < SdValuePage_VALUES_PER_PAGE)
-         break; /* this page has room for more */
-      page = page->next_page;
-   }
+   page = SdValuePage_FirstOpen;
    
-   /* if there's no room in any existing pages, then create a new page */
+   /* if there's no open page, then create a new page */
    if (!page) {
       page = SdAlloc(sizeof(SdValuePage));
-      page->next_page = SdValuePage_First;
-      SdValuePage_First = page;
+      SdValuePage_FirstOpen = page;
    }
    
    /* if there's anything in the free list, then use that first because recycling is cool.  if not, then press
       into service one of the slots that hasn't been used before. */
-   if (page->num_free_indices > 0) {
+   if (page->num_free_ptrs > 0) {
       /* remove it from the free list */
-      index = page->free_indices[page->num_free_indices-- - 1];
+      ptr = page->free_ptrs[page->num_free_ptrs-- - 1];
+      /* clean up after the last owner */
+      memset(ptr, 0, sizeof(SdValue));
    } else {
-      index = page->next_unused_index++;
+      ptr = &page->values[page->next_unused_index++];
    }
    
-   return &page->values[index];
+   /* if this page is now full, then move it to the full list */
+   if (page->num_free_ptrs == 0 && page->next_unused_index == SdValuePage_VALUES_PER_PAGE) {
+      SdValuePage_FirstOpen = page->next_page;
+      page->next_page = SdValuePage_FirstFull;
+      SdValuePage_FirstFull = page;
+   }
+   
+   return ptr;
 }
 
 static void SdFreeValue(SdValue* x) {
    SdValuePage_r page = NULL, prev_page = NULL;
-   unsigned short index = 0;
+   SdBool page_was_full = SdFalse;
    
    if (!x)
       return;
 
-   SdAssert(x->type != SdType_FREED);
-   
-   memset(x, 0, sizeof(SdValue));
-   x->type = SdType_FREED;
-
    /* figure out which page this value belongs to */
-   page = SdValuePage_First;
+   page = SdValuePage_FirstOpen;
    while (page) {
       if (x >= &page->values[0] && x < &page->values[SdValuePage_VALUES_PER_PAGE])
          break; /* it's on this page */
       prev_page = page;
       page = page->next_page;
    }
-
-   /*debug*/
+   
    if (!page) {
-      size_t num_pages = 0;
-      page = SdValuePage_First;
+      prev_page = NULL;
+      page = SdValuePage_FirstFull;
       while (page) {
-         num_pages++;
+         if (x >= &page->values[0] && x < &page->values[SdValuePage_VALUES_PER_PAGE]) {
+            page_was_full = SdTrue;
+            break; /* it's on this page */
+         }
+         prev_page = page;
          page = page->next_page;
       }
-      printf("Num pages: %lu\n", num_pages);
    }
+
    SdAssert(page);
    
    /* add to the free list in this page */
-   index = (unsigned short)(((char*)x - (char*)page->values) / sizeof(SdValue));
-   page->free_indices[page->num_free_indices++] = index;
+   page->free_ptrs[page->num_free_ptrs++] = x;
    
-   /* if all values on this page have been freed, then we can remove this page */
-   if (page->next_unused_index >= SdValuePage_VALUES_PER_PAGE) {
+   if (page_was_full) {
+      /* if this page was full, then move it to the open list */
       if (prev_page)
          prev_page->next_page = page->next_page;
       else
-         SdValuePage_First = page->next_page;
+         SdValuePage_FirstFull = page->next_page;
+      page->next_page = SdValuePage_FirstOpen;
+      SdValuePage_FirstOpen = page;
+   } else if (page->num_free_ptrs >= SdValuePage_VALUES_PER_PAGE) {
+      /* if this page was open and is now empty, then we can remove this page */
+      if (prev_page)
+         prev_page->next_page = page->next_page;
+      else
+         SdValuePage_FirstOpen = page->next_page;
       SdFree(page);
    }
 }
@@ -942,7 +945,6 @@ int SdValue_Hash(SdValue_r self) {
 
    SdAssert(self);
    switch (SdValue_Type(self)) {
-      case SdType_FREED:
       case SdType_ANY:
       case SdType_NIL:
          hash = 0;
