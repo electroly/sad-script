@@ -404,6 +404,7 @@ static size_t SdAlloc_BytesAllocatedSinceLastGc = 0;
 #ifdef NDEBUG
 #define SdAssert(x) ((void)0)
 #define SdAssertValue(x,t) ((void)0)
+#define SdAssertList(x) ((void)0)
 #define SdAssertNode(x,t) ((void)0)
 #define SdAssertExpr(x) ((void)0)
 #define SdAssertAllValuesOfType(x,t) ((void)0)
@@ -435,12 +436,17 @@ static void SdAssertValue(SdValue_r x, SdType t) {
    SdAssert(SdValue_Type(x) == t);
 }
 
+static void SdAssertList(SdValue_r x) {
+   SdAssert(x);
+   SdAssert(SdValue_Type(x) == SdType_LIST || SdValue_Type(x) == SdType_MUTALIST);
+}
+
 static void SdAssertNode(SdValue_r x, SdNodeType t) {
    SdAssert(SdAst_NodeType(x) == t);
 }
 
 static void SdAssertExpr(SdValue_r x) {
-   SdAssertValue(x, SdType_LIST);
+   SdAssertList(x);
    SdAssert(SdAst_NodeType(x) >= SdNodeType_EXPRESSIONS_FIRST && SdAst_NodeType(x) <= SdNodeType_EXPRESSIONS_LAST);
 }
 
@@ -462,7 +468,7 @@ static void SdAssertAllNodesOfTypes(SdList_r x, SdNodeType l, SdNodeType h) {
    count = SdList_Count(x);
    for (i = 0; i < count; i++) {
       SdValue_r value = SdList_GetAt(x, i);
-      SdAssertValue(value, SdType_LIST);
+      SdAssertList(value);
       SdAssert(SdAst_NodeType(value) >= l && SdAst_NodeType(value) <= h);
    }
 }
@@ -563,6 +569,7 @@ static const char* SdType_Name(SdType x) {
       case SdType_BOOL: return "Bool";
       case SdType_STRING: return "String";
       case SdType_LIST: return "List";
+      case SdType_MUTALIST: return "Mutalist";
       case SdType_FUNCTION: return "Function";
       case SdType_ERROR: return "Error";
       case SdType_TYPE: return "Type";
@@ -1031,6 +1038,7 @@ void SdValue_Delete(SdValue* self) {
       case SdType_STRING:
          SdString_Delete(SdValue_GetString(self));
          break;
+      case SdType_MUTALIST:
       case SdType_LIST:
       case SdType_FUNCTION:
       case SdType_ERROR:
@@ -1074,6 +1082,7 @@ SdString_r SdValue_GetString(SdValue_r self) {
 SdList_r SdValue_GetList(SdValue_r self) {
    SdAssert(self);
    SdAssert(
+      SdValue_Type(self) == SdType_MUTALIST ||
       SdValue_Type(self) == SdType_LIST ||
       SdValue_Type(self) == SdType_FUNCTION ||
       SdValue_Type(self) == SdType_ERROR);
@@ -1093,10 +1102,11 @@ SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
        (b_type == SdType_TYPE && SdValue_GetInt(b) == SdType_ANY))
       return SdTrue;
 
-   /* A Mutalist value is equal to the List type */
-   if ((a_type == SdType_TYPE && SdValue_GetInt(a) == SdType_LIST && b_type == SdType_MUTALIST) ||
-       (b_type == SdType_TYPE && SdValue_GetInt(b) == SdType_LIST && a_type == SdType_MUTALIST))
-      return SdTrue;
+   /* We can treat a mutalist as a list for equality purposes */
+   if (a_type == SdType_MUTALIST)
+      a_type = SdType_LIST;
+   if (b_type == SdType_MUTALIST)
+      b_type = SdType_LIST;
    
    /* If one of the values is a Type, then this acts like the "is" operator. */
    if (a_type == SdType_TYPE && b_type != SdType_TYPE)
@@ -1116,7 +1126,7 @@ SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
       case SdType_DOUBLE: return SdValue_GetDouble(a) == SdValue_GetDouble(b);
       case SdType_BOOL: return SdValue_GetBool(a) == SdValue_GetBool(b);
       case SdType_STRING: return SdString_Equals(SdValue_GetString(a), SdValue_GetString(b));
-      case SdType_LIST: return SdList_Equals(SdValue_GetList(a), SdValue_GetList(b));
+      case SdType_MUTALIST: case SdType_LIST: return SdList_Equals(SdValue_GetList(a), SdValue_GetList(b));
       default: return SdFalse;
    }
 }
@@ -1892,7 +1902,8 @@ static void SdEnv_CollectGarbage_MarkConnectedValues(SdValue_r root) {
       SdValue_r node = SdChain_Pop(stack);
       if (!SdValue_IsGcMarked(node)) {
          SdValue_SetGcMark(node, SdTrue);
-         if (SdValue_Type(node) == SdType_LIST ||
+         if (SdValue_Type(node) == SdType_MUTALIST || 
+             SdValue_Type(node) == SdType_LIST ||
              SdValue_Type(node) == SdType_FUNCTION ||
              SdValue_Type(node) == SdType_ERROR) {
             SdList_r list = NULL;
@@ -2057,7 +2068,7 @@ void SdEnv_PushCall(SdEnv_r self, SdValue_r calling_frame, SdValue_r name, SdVal
    SdAssert(self);
    SdAssert(name);
    SdAssertValue(name, SdType_STRING);
-   SdAssertValue(arguments, SdType_LIST);
+   SdAssertList(arguments);
 
    SdChain_Push(self->call_stack, SdEnv_CallTrace_New(self, name, arguments, calling_frame));
 }
@@ -2711,7 +2722,7 @@ SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r function_nod
    SdAssert(env);
    SdAssertNode(frame, SdNodeType_FRAME);
    SdAssertNode(function_node, SdNodeType_FUNCTION);
-   SdAssertValue(partial_arguments, SdType_LIST);
+   SdAssertList(partial_arguments);
 
    SdAst_VALUE(frame)
    SdAst_VALUE(function_node)
@@ -2746,7 +2757,7 @@ SdValue_r SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments, 
 
    SdAssert(env);
    SdAssertValue(name, SdType_STRING);
-   SdAssertValue(arguments, SdType_LIST);
+   SdAssertList(arguments);
    SdAssertNode(calling_frame, SdNodeType_FRAME);
 
    SdAst_VALUE(name)
@@ -4982,7 +4993,7 @@ static SdResult SdEngine_ExecuteMultiVar(SdEngine_r self, SdValue_r frame, SdVal
    expr = SdAst_MultiVar_ValueExpr(statement);
    if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &list_value)))
       return result;
-   if (SdValue_Type(list_value) != SdType_LIST)
+   if (SdValue_Type(list_value) != SdType_LIST && SdValue_Type(list_value) != SdType_MUTALIST)
       return SdFail(SdErr_TYPE_MISMATCH, "Multi-VAR statement expected a list on the right-hand side.");
    
    list = SdValue_GetList(list_value);
@@ -5042,7 +5053,7 @@ static SdResult SdEngine_ExecuteMultiSet(SdEngine_r self, SdValue_r frame, SdVal
    expr = SdAst_MultiSet_ValueExpr(statement);
    if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, expr, &list_value)))
       return result;
-   if (SdValue_Type(list_value) != SdType_LIST)
+   if (SdValue_Type(list_value) != SdType_LIST && SdValue_Type(list_value) != SdType_MUTALIST)
       return SdFail(SdErr_TYPE_MISMATCH, "Multi-VAR statement expected a list on the right-hand side.");
    
    list = SdValue_GetList(list_value);
@@ -5178,7 +5189,7 @@ static SdResult SdEngine_ExecuteForEach(SdEngine_r self, SdValue_r frame, SdValu
    if (SdFailed(result = SdEngine_EvaluateExpr(self, frame, haystack_expr, &haystack_value)))
       return result;
    
-   if (SdValue_Type(haystack_value) == SdType_LIST) {
+   if (SdValue_Type(haystack_value) == SdType_LIST || SdValue_Type(haystack_value) == SdType_MUTALIST) {
       haystack = SdValue_GetList(haystack_value);
 
       /* enumerate the list */
@@ -5677,6 +5688,9 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ToString)
       case SdType_LIST:
          *out_return = SdEnv_BoxString(self->env, SdString_FromCStr("(list)"));
          break;
+      case SdType_MUTALIST:
+         *out_return = SdEnv_BoxString(self->env, SdString_FromCStr("(mutalist)"));
+         break;
       case SdType_FUNCTION:
          *out_return = SdEnv_BoxString(self->env, SdString_FromCStr("(function)"));
          break;
@@ -5903,7 +5917,7 @@ SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_DoubleToInt)
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringJoin)
-   if (a_type == SdType_STRING && b_type == SdType_LIST) {
+   if (a_type == SdType_STRING && (b_type == SdType_LIST || b_type == SdType_MUTALIST)) {
       SdStringBuf* buf = NULL;
       SdString_r separator = NULL;
       SdList_r strings = NULL;

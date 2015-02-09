@@ -71,9 +71,9 @@ import function list args :List
 import function mutalist args :Mutalist
 import function list.length (self:List):Int
 import function list.get-at (self:List index:Int)
-import function list.set-at! (self:List index:Int value)
-import function list.insert-at! (self:List index:Int value)
-import function list.remove-at! (self:List index:Int)
+import function list.set-at! (self:Mutalist index:Int value)
+import function list.insert-at! (self:Mutalist index:Int value)
+import function list.remove-at! (self:Mutalist index:Int)
 
 import function string.length (self:String)
 import function string.get-at (self:String index:Int)
@@ -288,6 +288,7 @@ function abs (x:Int):Int {
 // The iterator is a function.  You call the iterator repeatedly and it returns a value, or nil to signal the end.
 
 function to-stream (x:List|Function) = match {
+   case Mutalist: (list.to-stream x)
    case List: (list.to-stream x)
    case Function: x
 }
@@ -312,7 +313,7 @@ function to-list (xs:List|Function) {
          return xs
       }
       case Function: {
-         var lst = (list)
+         var lst = (mutalist)
          for x in xs {
             [lst += x]
          }
@@ -624,7 +625,7 @@ function none? (xs) = (nil? (first xs))
 var HASHTABLE-BUCKET-COUNT = 37
 
 function hashtable () {
-   var x = (list)
+   var x = (mutalist)
    for i from 1 to HASHTABLE-BUCKET-COUNT {
       [x += nil]
    }
@@ -686,7 +687,7 @@ function hashtable.remove! (self key) {
 // dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A sorted association list: (list (list key-1 value-1) (list key-2 value-2) ...)
 
-function dict () = (list)
+function dict () = (mutalist)
 function dict-pair (key value) = (list key value)
 var DICT-PAIR.KEY = 0
 var DICT-PAIR.VALUE = 1
@@ -726,7 +727,7 @@ function dict.pair-index (self key) { // returns (list exact index)
 // A doubly-linked list: (list head-node count)
 // Each node: (list value prev next)
 
-function chain () = (list nil 0)
+function chain () = (mutalist nil 0)
 var CHAIN.HEAD = 0 // chain-node or nil
 var CHAIN.COUNT = 1 // int
 

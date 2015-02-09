@@ -24,7 +24,7 @@ var half-h = [0.5 * h]
 
 var old-re = 0.
 var old-im = 0.
-var image = (list)
+var image = (mutalist)
 
 for yi from 0 to [hi - 1] {
    var y = (int.to-double yi)

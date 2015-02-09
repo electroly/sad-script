@@ -24,7 +24,7 @@
 
 (println (type-of (list 1 2 3)))
 
-var x = (list 1 2 3)
+var x = (mutalist 1 2 3)
 (list.append! x 4)
 (println (list.length x))
 (println [x @ 3])
