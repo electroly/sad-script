@@ -152,6 +152,7 @@ struct SdValue_s {
 struct SdList_s {
    size_t count;
    SdListValuesUnion values;
+   SdBool is_read_only;
 #if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
    SdBool is_boxed; /* whether this list has been boxed already */
 #endif
@@ -374,6 +375,8 @@ static SdResult SdEngine_Intrinsic_StringLessThan(SdEngine_r self, SdList_r argu
 static SdResult SdEngine_Intrinsic_IntToDouble(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_DoubleToInt(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 static SdResult SdEngine_Intrinsic_StringJoin(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_List(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
+static SdResult SdEngine_Intrinsic_Mutalist(SdEngine_r self, SdList_r arguments, SdValue_r* out_return);
 
 /* Global variables */
 SdResult SdResult_SUCCESS = { SdErr_SUCCESS };
@@ -990,7 +993,10 @@ SdValue* SdValue_NewList(SdList* x) {
 
    SdAssert(x);
    value = SdAllocValue();
-   value->type = SdType_LIST;
+   if (SdList_IsReadOnly(x))
+      value->type = SdType_LIST;
+   else
+      value->type = SdType_MUTALIST;
    value->payload.list_value = x;
 
 #if defined(SD_DEBUG_ALL) || defined(SD_DEBUG_GC)
@@ -1087,6 +1093,11 @@ SdBool SdValue_Equals(SdValue_r a, SdValue_r b) {
        (b_type == SdType_TYPE && SdValue_GetInt(b) == SdType_ANY))
       return SdTrue;
 
+   /* A Mutalist value is equal to the List type */
+   if ((a_type == SdType_TYPE && SdValue_GetInt(a) == SdType_LIST && b_type == SdType_MUTALIST) ||
+       (b_type == SdType_TYPE && SdValue_GetInt(b) == SdType_LIST && a_type == SdType_MUTALIST))
+      return SdTrue;
+   
    /* If one of the values is a Type, then this acts like the "is" operator. */
    if (a_type == SdType_TYPE && b_type != SdType_TYPE)
       return (SdType)SdValue_GetInt(a) == b_type;
@@ -1159,6 +1170,7 @@ int SdValue_Hash(SdValue_r self) {
       }
 
       case SdType_LIST:
+      case SdType_MUTALIST:
       case SdType_FUNCTION:
       case SdType_ERROR: {
          size_t i = 0, length = 0, count = 0;
@@ -1243,12 +1255,25 @@ void SdList_Delete(SdList* self) {
    SdFreeList(self);
 }
 
+void SdList_MakeReadOnly(SdList_r self) {
+   SdAssert(self);
+   self->is_read_only = SdTrue;
+}
+
+SdBool SdList_IsReadOnly(SdList_r self) {
+   SdAssert(self);
+   return self->is_read_only;
+}
+
 void SdList_Append(SdList_r self, SdValue_r item) {
    size_t new_count = 0;
    
    SdAssert(self);
    SdAssert(item);
    new_count = self->count + 1;
+   
+   if (self->is_read_only)
+      SdExit("Attempted to write to a read-only list.");
 
    switch (self->count) {
       case 0: {
@@ -1312,6 +1337,9 @@ void SdList_SetAt(SdList_r self, size_t index, SdValue_r item) {
    SdAssert(item);
    SdAssert(index < self->count + 1);
    
+   if (self->is_read_only)
+      SdExit("Attempted to write to a read-only list.");
+   
    switch (self->count) {
       case 1: self->values.array_1->elements[index] = item; break;
       case 2: self->values.array_2->elements[index] = item; break;
@@ -1331,6 +1359,9 @@ void SdList_InsertAt(SdList_r self, size_t index, SdValue_r item) {
    SdAssert(self);
    SdAssert(item);
    SdAssert(index <= self->count);
+   
+   if (self->is_read_only)
+      SdExit("Attempted to write to a read-only list.");
    
    if (index == self->count) {
       SdList_Append(self, item);
@@ -1440,6 +1471,9 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
    SdAssert(self);
    SdAssert(index < self->count);
    
+   if (self->is_read_only)
+      SdExit("Attempted to write to a read-only list.");
+   
    old_count = self->count;
    old_values = self->values;
 
@@ -1507,6 +1541,9 @@ SdValue_r SdList_RemoveAt(SdList_r self, size_t index) {
 void SdList_Clear(SdList_r self) {
    SdAssert(self);
    
+   if (self->is_read_only)
+      SdExit("Attempted to write to a read-only list.");
+   
    switch (self->count) {
       case 1: SdFree1ElementArray(self->values.array_1); break;
       case 2: SdFree2ElementArray(self->values.array_2); break;
@@ -1567,6 +1604,10 @@ SdBool SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc 
    SdAssert(item);
    SdAssert(compare_func);
    SdAssert(context);
+   
+   if (list->is_read_only)
+      SdExit("Attempted to write to a read-only list.");
+   
    result = SdList_Search(list, compare_func, context);
    if (result.exact) { /* An item with this name already exists. */
       return SdFalse;
@@ -5480,6 +5521,7 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
       case 'l':
          INTRINSIC("log", SdEngine_Intrinsic_Log);
          INTRINSIC("log10", SdEngine_Intrinsic_Log10);
+         INTRINSIC("list", SdEngine_Intrinsic_List);
          INTRINSIC("list.length", SdEngine_Intrinsic_ListLength);
          INTRINSIC("list.get-at", SdEngine_Intrinsic_ListGetAt);
          INTRINSIC("list.set-at!", SdEngine_Intrinsic_ListSetAt);
@@ -5487,6 +5529,10 @@ static SdResult SdEngine_CallIntrinsic(SdEngine_r self, SdString_r name, SdList_
          INTRINSIC("list.remove-at!", SdEngine_Intrinsic_ListRemoveAt);
          break;
 
+      case 'm':
+         INTRINSIC("mutalist", SdEngine_Intrinsic_Mutalist);
+         break;
+      
       case 'n':
          INTRINSIC("not", SdEngine_Intrinsic_Not);
          break;
@@ -5663,6 +5709,7 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_Add)
          SdStringBuf_Delete(buf);
          break;
       }
+      case SdType_MUTALIST:
       case SdType_LIST: {
          SdList* list = NULL;
          SdList_r a_list = NULL, b_list = NULL;
@@ -5719,14 +5766,14 @@ SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftLeft, a << b)
 SdEngine_INTRINSIC_INT2(SdEngine_Intrinsic_ShiftRight, a >> b)
 
 SdEngine_INTRINSIC_START_ARGS1(SdEngine_Intrinsic_ListLength)
-   if (a_type == SdType_LIST) {
+   if (a_type == SdType_LIST || a_type == SdType_MUTALIST) {
       *out_return = SdEnv_BoxInt(self->env, (int)SdList_Count(SdValue_GetList(a_val)));
    }
 SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListGetAt)
    SdUnreferenced(self);
-   if (a_type == SdType_LIST && b_type == SdType_INT) {
+   if ((a_type == SdType_LIST || a_type == SdType_MUTALIST) && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
       if (b_int < 0 || (size_t)b_int >= SdList_Count(a_list))
@@ -5737,7 +5784,7 @@ SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListSetAt)
    SdUnreferenced(self);
-   if (a_type == SdType_LIST && b_type == SdType_INT) {
+   if (a_type == SdType_MUTALIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
       if (b_int < 0 || (size_t)b_int >= SdList_Count(a_list))
@@ -5749,7 +5796,7 @@ SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS3(SdEngine_Intrinsic_ListInsertAt)
    SdUnreferenced(self);
-   if (a_type == SdType_LIST && b_type == SdType_INT) {
+   if (a_type == SdType_MUTALIST && b_type == SdType_INT) {
       SdList_r a_list = NULL;
       int b_int = 0;
 
@@ -5764,7 +5811,7 @@ SdEngine_INTRINSIC_END
 
 SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_ListRemoveAt)
    SdUnreferenced(self);
-   if (a_type == SdType_LIST && b_type == SdType_INT) {
+   if (a_type == SdType_MUTALIST && b_type == SdType_INT) {
       SdList_r a_list = SdValue_GetList(a_val);
       int b_int = SdValue_GetInt(b_val);
       if (b_int < 0 || (size_t)b_int >= SdList_Count(a_list))
@@ -5892,3 +5939,20 @@ SdEngine_INTRINSIC_START_ARGS2(SdEngine_Intrinsic_StringJoin)
       SdStringBuf_Delete(buf);
    }
 SdEngine_INTRINSIC_END
+
+static SdResult SdEngine_Intrinsic_List(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) {
+   SdList* clone = NULL;
+   
+   SdAssert(arguments);
+   
+   clone = SdList_Clone(arguments);
+   SdList_MakeReadOnly(clone);
+   *out_return = SdEnv_BoxList(self->env, clone);
+   return SdResult_SUCCESS;
+}
+
+static SdResult SdEngine_Intrinsic_Mutalist(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) {
+   SdAssert(arguments);
+   *out_return = SdEnv_BoxList(self->env, SdList_Clone(arguments));
+   return SdResult_SUCCESS;
+}

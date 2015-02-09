@@ -97,16 +97,17 @@ typedef enum SdType_e {
    SdType_BOOL = 3,
    SdType_STRING = 4,
    SdType_LIST = 5,
+   SdType_MUTALIST = 6,
 
    /* these are really just lists, but with unique types to distinguish them from general purpose lists */
-   SdType_FUNCTION = 6,
-   SdType_ERROR = 7,
+   SdType_FUNCTION = 7,
+   SdType_ERROR = 8,
 
    /* this is really just an integer, but with a unique type to distinguish it from general purpose numbers */
-   SdType_TYPE = 8,
+   SdType_TYPE = 9,
 
    /* can't create a value of this type, it exists only so we can deal with the type itself in pattern matching */
-   SdType_ANY = 9
+   SdType_ANY = 10
 } SdType;
 
 typedef enum SdTokenType_e {
@@ -280,6 +281,8 @@ void           SdValue_SetGcMark(SdValue_r self, SdBool mark);
 SdList*        SdList_New(void);
 SdList*        SdList_NewWithLength(size_t length);
 void           SdList_Delete(SdList* self);
+void           SdList_MakeReadOnly(SdList_r self);
+SdBool         SdList_IsReadOnly(SdList_r self);
 void           SdList_Append(SdList_r self, SdValue_r item);
 void           SdList_SetAt(SdList_r self, size_t index, SdValue_r item);
 void           SdList_InsertAt(SdList_r self, size_t index, SdValue_r item);

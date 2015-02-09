@@ -67,6 +67,8 @@ import function double.< (a:Double b:Double):Bool
 import function double.to-int (x:Double):Int
 import function string.< (a:String b:String):Bool
 
+import function list args :List
+import function mutalist args :Mutalist
 import function list.length (self:List):Int
 import function list.get-at (self:List index:Int)
 import function list.set-at! (self:List index:Int value)
@@ -88,14 +90,14 @@ var Double = (get-type 2)
 var Bool = (get-type 3)
 var String = (get-type 4)
 var List = (get-type 5)
-var Function = (get-type 6)
-var Error = (get-type 7)
-var Type = (get-type 8)
-var Any = (get-type 9)
+var Mutalist = (get-type 6)
+var Function = (get-type 7)
+var Error = (get-type 8)
+var Type = (get-type 9)
+var Any = (get-type 10)
 
 // Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-function list xs :List = xs
 function nil? (self):Bool = [self = Nil]
 function nil-or-error? (self):Bool = [[self = Nil] or [self = Error]]
 function non-nil? (self):Bool = (not (nil? self))
