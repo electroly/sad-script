@@ -3499,7 +3499,7 @@ static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue
    } else {
       SdString* param_name = NULL;
       SdParser_READ_IDENTIFIER(param_name);
-      SdList_Append(parameter_names, SdEnv_BoxString(env, param_name));
+      SdList_Append(parameter_names, SdAst_Parameter_New(env, param_name, SdList_New()));
       has_var_args = SdTrue;
    }
 
@@ -3691,13 +3691,13 @@ static SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_
    if (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
       SdString* param_name = NULL;
       SdParser_READ_IDENTIFIER(param_name);
-      SdList_Append(param_names, SdEnv_BoxString(env, param_name));
+      SdList_Append(param_names, SdAst_Parameter_New(env, param_name, SdList_New()));
    } else {
       SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
       while (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
          SdString* param_name = NULL;
          SdParser_READ_IDENTIFIER(param_name);
-         SdList_Append(param_names, SdEnv_BoxString(env, param_name));
+         SdList_Append(param_names, SdAst_Parameter_New(env, param_name, SdList_New()));
       }
       SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
    }
