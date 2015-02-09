@@ -1,0 +1,7 @@
+//true
+
+function f1 (x:Int) {
+   return true
+}
+
+(println (f1 5))

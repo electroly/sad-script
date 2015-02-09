@@ -23,6 +23,7 @@
    define SD_DEBUG_GC to run the garbage collector at every opportunity, catch double-boxing.
    define SD_DEBUG_MEMUSE to track the total number and size of allocations
    define SD_DEBUG_MSVC to enable non-portable Visual C++ memory leak detection.
+   define SD_DEBUG_GCC to enablbe non-portable GCC debugging.
    define NDEBUG to disable assertions. 
 */
 
@@ -35,10 +36,17 @@
 #pragma warning(push, 0) /* ignore warnings in system headers */
 #endif
 
-#ifdef SD_DEBUG_ALL
+#if defined(SD_DEBUG_MSVC) || defined(SD_DEBUG_ALL)
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
+#endif
+
+#ifdef SD_DEBUG_GCC
+#include <execinfo.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
 #endif
 
 #include <assert.h>
@@ -388,6 +396,8 @@ static Sd4ElementArrayPage* Sd4ElementArrayPage_FirstFull = NULL;
 static size_t SdAlloc_BytesAllocatedSinceLastGc = 0;
 
 /* Helpers ***********************************************************************************************************/
+#define STRINGIFY(x) #x
+
 #ifdef NDEBUG
 #define SdAssert(x) ((void)0)
 #define SdAssertValue(x,t) ((void)0)
@@ -398,7 +408,24 @@ static size_t SdAlloc_BytesAllocatedSinceLastGc = 0;
 #define SdAssertAllNodesOfType(x,t) ((void)0)
 #define SdAssertNonEmptyString(x) ((void)0)
 #else
+
+#ifdef SD_DEBUG_GCC
+static void SdAssertCore(SdBool x, const char* condition) {
+   void* array[10];
+   size_t size;
+   
+   if (!x) {
+      size = backtrace(array, 10);
+      fprintf(stderr, "Assertion failed: %s\n", condition);
+      backtrace_symbols_fd(array, size, STDERR_FILENO);
+   }
+   
+   assert((x) != 0);
+}
+#define SdAssert(x) SdAssertCore((x) != 0, STRINGIFY(x))
+#else
 #define SdAssert(x) assert((x) != 0)
+#endif
 
 static void SdAssertValue(SdValue_r x, SdType t) {
    SdAssert(x);
@@ -4205,7 +4232,6 @@ end:
 }
 
 /* SdEngine **********************************************************************************************************/
-#define STRINGIFY(x) #x
 #define SdEngine_INTRINSIC_START_ARGS1(name) \
    static SdResult name(SdEngine_r self, SdList_r arguments, SdValue_r* out_return) { \
       SdResult result = SdResult_SUCCESS; \
@@ -4462,6 +4488,49 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
       result = SdEngine_CallIntrinsic(self, SdValue_GetString(SdAst_Function_Name(function)), 
          total_arguments, out_return);
       goto end;
+   }
+   
+   /* check the types of the arguments against any type annotations that may be present */
+   if (!has_var_args) {
+      count = SdList_Count(total_arguments);
+      for (i = 0; i < count; i++) {
+         SdValue_r parameter = NULL, argument = NULL;
+         SdList_r type_names = NULL;
+         size_t type_count = 0;
+         
+         parameter = SdList_GetAt(parameters, i);
+         argument = SdList_GetAt(total_arguments, i);
+         type_names = SdAst_Parameter_TypeNames(parameter);
+         type_count = SdList_Count(type_names);
+         
+         if (type_count > 0) {
+            SdBool is_match = SdFalse;
+            size_t j = 0;
+            
+            for (j = 0; j < type_count; j++) {
+               SdString_r type_name = NULL;
+               SdValue_r slot = NULL, type_val = NULL;
+               
+               type_name = SdValue_GetString(SdList_GetAt(type_names, j));
+               slot = SdEnv_FindVariableSlot(self->env, frame, type_name, SdTrue);
+               if (!slot) {
+                  result = SdFail(SdErr_UNDECLARED_VARIABLE, "Type annotation must evaluate to a type.");
+                  goto end;
+               }
+               type_val = SdEnv_VariableSlot_Value(slot);
+               if (SdValue_Equals(argument, type_val)) {
+                  is_match = SdTrue;
+                  break;
+               }
+            }
+            
+            if (!is_match) {
+               result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Type mismatch in function: ",
+                  SdValue_GetString(actual_function_name));
+               goto end;
+            }
+         }
+      }
    }
 
    /* create a frame containing the argument values */

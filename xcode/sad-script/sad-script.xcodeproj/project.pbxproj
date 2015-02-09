@@ -26,6 +26,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D332FF271A883C330093CB6A /* prelude.sad */ = {isa = PBXFileReference; lastKnownFileType = text; name = prelude.sad; path = ../../../src/prelude.sad; sourceTree = "<group>"; };
 		D3B0B6391A8700EC007F74B0 /* sad-script */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "sad-script"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3B0B63E1A8700EC007F74B0 /* sad_script.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = sad_script.1; sourceTree = "<group>"; };
 		D3B0B6451A87011A007F74B0 /* sad-script.c */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 3; lastKnownFileType = sourcecode.c.c; name = "sad-script.c"; path = "../../../src/sad-script.c"; sourceTree = "<group>"; tabWidth = 3; wrapsLines = 0; };
@@ -64,6 +65,7 @@
 		D3B0B63B1A8700EC007F74B0 /* sad-script */ = {
 			isa = PBXGroup;
 			children = (
+				D332FF271A883C330093CB6A /* prelude.sad */,
 				D3B0B64A1A8701D1007F74B0 /* language.txt */,
 				D3B0B6451A87011A007F74B0 /* sad-script.c */,
 				D3B0B6461A87011A007F74B0 /* sad-script.h */,
@@ -235,6 +237,7 @@
 				D3B0B6441A8700EC007F74B0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
