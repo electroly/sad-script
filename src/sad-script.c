@@ -268,6 +268,7 @@ static SdResult SdParser_FailType(SdToken_r token, SdTokenType expected_type, Sd
 static const char* SdParser_TypeString(SdTokenType type);
 static SdResult SdParser_ReadExpectType(SdScanner_r scanner, SdTokenType expected_type, SdToken_r* out_token);
 static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
+static SdResult SdParser_ParseParameter(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseExpr(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
 static SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node);
@@ -2200,27 +2201,41 @@ SdValue_r SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* statements) 
 SdAst_LIST_GETTER(SdAst_Program_Functions, SdNodeType_PROGRAM, 1)
 SdAst_LIST_GETTER(SdAst_Program_Statements, SdNodeType_PROGRAM, 2)
 
-SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
+SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameters, SdValue_r body,
    SdBool is_imported, SdBool has_var_args) {
    SdAst_BEGIN(SdNodeType_FUNCTION)
 
    SdAssert(env);
    SdAssertNonEmptyString(function_name);
-   SdAssertAllValuesOfType(parameter_names, SdType_STRING);
+   SdAssertAllNodesOfType(parameters, SdNodeType_PARAMETER);
    SdAssertNode(body, SdNodeType_BODY);
 
    SdAst_STRING(function_name)
-   SdAst_LIST(parameter_names)
+   SdAst_LIST(parameters)
    SdAst_VALUE(body)
    SdAst_BOOL(is_imported)
    SdAst_BOOL(has_var_args)
    SdAst_END
 }
 SdAst_VALUE_GETTER(SdAst_Function_Name, SdNodeType_FUNCTION, 1)
-SdAst_VALUE_GETTER(SdAst_Function_ParameterNames, SdNodeType_FUNCTION, 2)
+SdAst_VALUE_GETTER(SdAst_Function_Parameters, SdNodeType_FUNCTION, 2)
 SdAst_VALUE_GETTER(SdAst_Function_Body, SdNodeType_FUNCTION, 3)
 SdAst_BOOL_GETTER(SdAst_Function_IsImported, SdNodeType_FUNCTION, 4)
 SdAst_BOOL_GETTER(SdAst_Function_HasVariableLengthArgumentList, SdNodeType_FUNCTION, 5)
+
+SdValue_r SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_names) {
+   SdAst_BEGIN(SdNodeType_PARAMETER)
+   
+   SdAssert(env);
+   SdAssertNonEmptyString(identifier);
+   SdAssertAllValuesOfType(type_names, SdType_STRING);
+   
+   SdAst_STRING(identifier)
+   SdAst_LIST(type_names)
+   SdAst_END
+}
+SdAst_VALUE_GETTER(SdAst_Parameter_Identifier, SdNodeType_PARAMETER, 1)
+SdAst_LIST_GETTER(SdAst_Parameter_TypeNames, SdNodeType_PARAMETER, 2)
 
 SdValue_r SdAst_Body_New(SdEnv_r env, SdList* statements) {
    SdAst_BEGIN(SdNodeType_BODY)
@@ -2619,26 +2634,22 @@ void SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value) {
    SdList_SetAt(SdValue_GetList(self), 2, value);
 }
 
-SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node,
-   SdValue_r partial_arguments) {
+SdValue_r SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r function_node, SdValue_r partial_arguments) {
    SdAst_BEGIN(SdNodeType_CLOSURE)
 
    SdAssert(env);
    SdAssertNode(frame, SdNodeType_FRAME);
-   SdAssertAllValuesOfType(SdValue_GetList(param_names), SdType_STRING);
    SdAssertNode(function_node, SdNodeType_FUNCTION);
    SdAssertValue(partial_arguments, SdType_LIST);
 
    SdAst_VALUE(frame)
-   SdAst_VALUE(param_names)
    SdAst_VALUE(function_node)
    SdAst_VALUE(partial_arguments)
    return SdAst_NewFunctionNode(env, values, i);
 }
 SdAst_VALUE_GETTER(SdEnv_Closure_Frame, SdNodeType_CLOSURE, 1)
-SdAst_VALUE_GETTER(SdEnv_Closure_ParameterNames, SdNodeType_CLOSURE, 2)
-SdAst_VALUE_GETTER(SdEnv_Closure_FunctionNode, SdNodeType_CLOSURE, 3)
-SdAst_VALUE_GETTER(SdEnv_Closure_PartialArguments, SdNodeType_CLOSURE, 4)
+SdAst_VALUE_GETTER(SdEnv_Closure_FunctionNode, SdNodeType_CLOSURE, 2)
+SdAst_VALUE_GETTER(SdEnv_Closure_PartialArguments, SdNodeType_CLOSURE, 3)
 
 SdValue_r SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments) {
    SdList* partial_arguments = NULL;
@@ -2655,7 +2666,6 @@ SdValue_r SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, Sd
 
    return SdEnv_Closure_New(env,
       SdEnv_Closure_Frame(self),
-      SdEnv_Closure_ParameterNames(self),
       SdEnv_Closure_FunctionNode(self),
       SdEnv_BoxList(env, partial_arguments));
 }
@@ -2963,6 +2973,7 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
          case '{':
          case '}':
          case ':':
+         case '|':
          case '\\':
             if (SdStringBuf_Length(current_text) > 0) {
                SdScanner_AppendToken(self, source_line, SdStringBuf_CStr(current_text));
@@ -2998,6 +3009,7 @@ void SdScanner_Tokenize(SdScanner_r self, const char* text) {
          case '[':
          case ']':
          case ':':
+         case '|':
          case '\\': {
             char token_text[2] = { 0 };
             token_text[0] = ch;
@@ -3084,6 +3096,7 @@ static SdTokenType SdScanner_ClassifyToken(const char* text) {
       case '{': return SdTokenType_OPEN_BRACE;
       case '}': return SdTokenType_CLOSE_BRACE;
       case ':': return SdTokenType_COLON;
+      case '|': return SdTokenType_PIPE;
       case '\\': return SdTokenType_LAMBDA;
 
       case 0xCE:
@@ -3350,6 +3363,7 @@ static const char* SdParser_TypeString(SdTokenType type) {
       case SdTokenType_OPEN_BRACE: return "{";
       case SdTokenType_CLOSE_BRACE: return "}";
       case SdTokenType_COLON: return ":";
+      case SdTokenType_PIPE: return "|";
       case SdTokenType_IDENTIFIER: return "<identifier>";
       case SdTokenType_FUNCTION: return "function";
       case SdTokenType_VAR: return "var";
@@ -3477,9 +3491,9 @@ static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue
    if (SdScanner_PeekType(scanner) == SdTokenType_OPEN_PAREN) {
       SdParser_READ_EXPECT_TYPE(SdTokenType_OPEN_PAREN);
       while (SdScanner_PeekType(scanner) == SdTokenType_IDENTIFIER) {
-         SdString* param_name = NULL;
-         SdParser_READ_IDENTIFIER(param_name);
-         SdList_Append(parameter_names, SdEnv_BoxString(env, param_name));
+         SdValue_r parameter = NULL;
+         SdParser_CALL(SdParser_ParseParameter(env, scanner, &parameter));
+         SdList_Append(parameter_names, parameter);
       }
       SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
    } else {
@@ -3514,6 +3528,40 @@ end:
    if (function_name) SdString_Delete(function_name);
    if (parameter_names) SdList_Delete(parameter_names);
    return result;
+}
+
+static SdResult SdParser_ParseParameter(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
+   SdToken_r token = NULL;
+   SdResult result = SdResult_SUCCESS;
+   SdString* identifier = NULL;
+   SdString* type_name = NULL;
+   SdList* type_names = NULL;
+   
+   SdParser_READ_IDENTIFIER(identifier);
+   type_names = SdList_New();
+   if (SdScanner_PeekType(scanner) == SdTokenType_COLON) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
+      SdParser_READ_IDENTIFIER(type_name);
+      SdList_Append(type_names, SdEnv_BoxString(env, type_name));
+      type_name = NULL;
+      
+      while (SdScanner_PeekType(scanner) == SdTokenType_PIPE) {
+         SdParser_READ_EXPECT_TYPE(SdTokenType_PIPE);
+         SdParser_READ_IDENTIFIER(type_name);
+         SdList_Append(type_names, SdEnv_BoxString(env, type_name));
+         type_name = NULL;
+      }
+   }
+   
+   *out_node = SdAst_Parameter_New(env, identifier, type_names);
+   identifier = NULL;
+   type_names = NULL;
+end:
+   if (identifier) SdString_Delete(identifier);
+   if (type_name) SdString_Delete(type_name);
+   if (type_names) SdList_Delete(type_names);
+   return result;
+   
 }
 
 static SdResult SdParser_ParseBody(SdEnv_r env, SdScanner_r scanner, SdValue_r* out_node) {
@@ -4346,7 +4394,7 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r function = NULL, call_frame = NULL, total_arguments_value = NULL, actual_function_name = NULL;
-   SdList_r param_names = NULL, partial_arguments = NULL, total_arguments = NULL;
+   SdList_r parameters = NULL, partial_arguments = NULL, total_arguments = NULL;
    SdBool has_var_args = SdFalse, in_call = SdFalse, gc_needed = SdFalse;
    size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
 
@@ -4367,9 +4415,9 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
 
    /* ensure that the argument list matches the parameter list. skip the check for intrinsics since they are more 
       flexible and will do the check themselves. also skip the check for variable argument functions. */
-   param_names = SdValue_GetList(SdEnv_Closure_ParameterNames(closure));
+   parameters = SdValue_GetList(SdAst_Function_Parameters(function));
    has_var_args = SdAst_Function_HasVariableLengthArgumentList(function);
-   if (!SdAst_Function_IsImported(function) && !has_var_args && total_arguments_count > SdList_Count(param_names)) {
+   if (!SdAst_Function_IsImported(function) && !has_var_args && total_arguments_count > SdList_Count(parameters)) {
       result = SdFailWithStringSuffix(SdErr_ARGUMENT_MISMATCH, "Too many arguments to function: ", 
          SdValue_GetString(actual_function_name));
       goto end;
@@ -4391,7 +4439,7 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    }
 
    /* if this is a partial function application, then construct the closure and return it. */
-   if (!has_var_args && total_arguments_count < SdList_Count(param_names)) {
+   if (!has_var_args && total_arguments_count < SdList_Count(parameters)) {
       *out_return = SdEnv_Closure_CopyWithPartialArguments(closure, self->env, arguments);
       goto end;
    }
@@ -4419,7 +4467,7 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    /* create a frame containing the argument values */
    call_frame = SdEnv_BeginFrame(self->env, SdEnv_Closure_Frame(closure));
    if (has_var_args) {
-      SdValue_r param_name = SdList_GetAt(param_names, 0);
+      SdValue_r param_name = SdAst_Parameter_Identifier(SdList_GetAt(parameters, 0));
       if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, total_arguments_value)))
          goto end;
    } else {
@@ -4427,7 +4475,7 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
       for (i = 0; i < count; i++) {
          SdValue_r param_name, arg_value;
          
-         param_name = SdList_GetAt(param_names, i);
+         param_name = SdAst_Parameter_Identifier(SdList_GetAt(parameters, i));
          arg_value = SdList_GetAt(total_arguments, i);
          if (SdFailed(result = SdEnv_DeclareVar(self->env, call_frame, param_name, arg_value)))
             goto end;
@@ -4535,8 +4583,7 @@ static SdResult SdEngine_EvaluateFunction(SdEngine_r self, SdValue_r frame, SdVa
    SdAssertNode(frame, SdNodeType_FRAME);
    SdAssert(SdAst_NodeType(function) == SdNodeType_FUNCTION);
 
-   *out_value = SdEnv_Closure_New(self->env, frame, SdAst_Function_ParameterNames(function), function,
-      SdEnv_BoxList(self->env, SdList_New()));
+   *out_value = SdEnv_Closure_New(self->env, frame, function, SdEnv_BoxList(self->env, SdList_New()));
    return SdResult_SUCCESS;
 }
 

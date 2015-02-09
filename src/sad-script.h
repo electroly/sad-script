@@ -144,7 +144,8 @@ typedef enum SdTokenType_e {
    SdTokenType_IMPORT,
    SdTokenType_NIL,
    SdTokenType_LAMBDA,
-   SdTokenType_MATCH
+   SdTokenType_MATCH,
+   SdTokenType_PIPE
 } SdTokenType;
 
 typedef enum SdNodeType_e {
@@ -192,6 +193,7 @@ typedef enum SdNodeType_e {
    SdNodeType_ELSEIF,
    SdNodeType_SWITCH_CASE,
    SdNodeType_MATCH_CASE,
+   SdNodeType_PARAMETER,
 
    SdNodeType_BLOCKS_FIRST = SdNodeType_PROGRAM,
    SdNodeType_BLOCKS_LAST = SdNodeType_FUNCTION,
@@ -305,7 +307,7 @@ Frame: -------------+------------------+----------------------+-----------------
 VariableSlot: ------+------------------+----------------------+------------------------+----------------------------
    (list VAR_SLOT   | name:Str         | payload:Value)       |                        | 
 Closure: -----------+------------------+----------------------+------------------------+----------------------------
-   (list CLOSURE    | context:Frame    | param-names:Lst<Str> | function-node:Function | partial-arg-values:Lst<*>)
+   (list CLOSURE    | context:Frame    | function-node:Func   | partial-arg-values:Lst)|
 CallTrace: ---------+------------------+----------------------+------------------------+----------------------------
    (list CALL_TRACE | name:Str         | args:Lst<*>          | calling-frame:Frame)   |
 */
@@ -353,10 +355,8 @@ SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
 SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
 void           SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value);
 
-SdValue_r      SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r param_names, SdValue_r function_node,
-                  SdValue_r partial_arguments);
+SdValue_r      SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r function_node, SdValue_r partial_arguments);
 SdValue_r      SdEnv_Closure_Frame(SdValue_r self);
-SdValue_r      SdEnv_Closure_ParameterNames(SdValue_r self);
 SdValue_r      SdEnv_Closure_FunctionNode(SdValue_r self);
 SdValue_r      SdEnv_Closure_PartialArguments(SdValue_r self);
 SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments);
@@ -370,7 +370,8 @@ SdValue_r      SdEnv_CallTrace_CallingFrame(SdValue_r self);
             0       |    1                    |    2                |    3          |    4          |    5
 --------------------+-------------------------+---------------------+---------------+---------------|---------------
    (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |               |               |
-   (list FUNCTION   | name:Str                | params:Lst<Str>     | Body          | imported:Bool | var-args:Bool)
+   (list FUNCTION   | name:Str                | params:Lst<Param>   | Body          | imported:Bool | var-args:Bool)
+   (list PARAMETER  | name:Str                | types:Lst<Str>)     |               |               |
 Statement: ---------+-------------------------+---------------------+---------------+---------------|---------------
    (list CALL       | function-name:VarRef    | args:Lst<Expr>)     |               |               |
    (list VAR        | variable-name:Str       | value:Expr)         |               |               | 
@@ -407,14 +408,18 @@ SdValue_r      SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* stateme
 SdList_r       SdAst_Program_Functions(SdValue_r self);
 SdList_r       SdAst_Program_Statements(SdValue_r self);
 
-SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameter_names, SdValue_r body, 
+SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameters, SdValue_r body,
                   SdBool is_imported, SdBool has_var_args);
 SdValue_r      SdAst_Function_Name(SdValue_r self);
 SdValue_r      SdAst_Function_Body(SdValue_r self);
-SdValue_r      SdAst_Function_ParameterNames(SdValue_r self);
+SdValue_r      SdAst_Function_Parameters(SdValue_r self);
 SdBool         SdAst_Function_IsImported(SdValue_r self);
 SdBool         SdAst_Function_HasVariableLengthArgumentList(SdValue_r self);
 
+SdValue_r      SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_names);
+SdValue_r      SdAst_Parameter_Identifier(SdValue_r self);
+SdList_r       SdAst_Parameter_TypeNames(SdValue_r self);
+   
 SdValue_r      SdAst_Body_New(SdEnv_r env, SdList* statements);
 SdList_r       SdAst_Body_Statements(SdValue_r self);
 
