@@ -4838,7 +4838,7 @@ end:
 }
 
 static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdValue_r statement, SdValue_r* out_return) {
-   SdValue_r discarded_result = NULL;
+   SdValue_r discarded_return = NULL;
 
    SdAssert(self);
    SdAssert(frame);
@@ -4847,7 +4847,15 @@ static SdResult SdEngine_ExecuteStatement(SdEngine_r self, SdValue_r frame, SdVa
    SdAssertNode(frame, SdNodeType_FRAME);
 
    switch (SdAst_NodeType(statement)) {
-      case SdNodeType_CALL: return SdEngine_ExecuteCall(self, frame, statement, &discarded_result);
+      case SdNodeType_CALL: {
+         SdResult result = SdEngine_ExecuteCall(self, frame, statement, &discarded_return);
+         if (discarded_return && SdValue_Type(discarded_return) == SdType_ERROR) {
+            SdString* message = SdValue_GetString(SdList_GetAt(SdValue_GetList(discarded_return), 0));
+            result = SdFailWithStringSuffix(SdErr_DIED, "Unhandled error: ", message);
+            SdString_Delete(message);
+         }
+         return result;
+      }
       case SdNodeType_VAR: return SdEngine_ExecuteVar(self, frame, statement);
       case SdNodeType_SET: return SdEngine_ExecuteSet(self, frame, statement);
       case SdNodeType_MULTI_VAR: return SdEngine_ExecuteMultiVar(self, frame, statement);

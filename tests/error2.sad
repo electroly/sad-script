@@ -1,0 +1,7 @@
+//ERROR: Unhandled error: Message
+
+function f1 () {
+   return (error "Message")
+}
+
+(f1)
