@@ -370,8 +370,8 @@ SdValue_r      SdEnv_CallTrace_CallingFrame(SdValue_r self);
             0       |    1                    |    2                |    3          |    4          |    5
 --------------------+-------------------------+---------------------+---------------+---------------|---------------
    (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |               |               |
-   (list FUNCTION   | name:Str                | params:Lst<Param>   | Body          | imported:Bool | var-args:Bool)
-   (list PARAMETER  | name:Str                | types:Lst<Str>)     |               |               |
+   (list FUNCTION 1-name:Str 2-params:Lst<Param> 3-Body 4-imported:Bool 5-var-args:Bool 6-return-types:Lst<VarRef>
+   (list PARAMETER  | name:Str                | types:Lst<VarRef>)  |               |               |
 Statement: ---------+-------------------------+---------------------+---------------+---------------|---------------
    (list CALL       | function-name:VarRef    | args:Lst<Expr>)     |               |               |
    (list VAR        | variable-name:Str       | value:Expr)         |               |               | 
@@ -409,16 +409,17 @@ SdList_r       SdAst_Program_Functions(SdValue_r self);
 SdList_r       SdAst_Program_Statements(SdValue_r self);
 
 SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameters, SdValue_r body,
-                  SdBool is_imported, SdBool has_var_args);
+                  SdBool is_imported, SdBool has_var_args, SdList* return_types);
 SdValue_r      SdAst_Function_Name(SdValue_r self);
 SdValue_r      SdAst_Function_Body(SdValue_r self);
 SdValue_r      SdAst_Function_Parameters(SdValue_r self);
 SdBool         SdAst_Function_IsImported(SdValue_r self);
 SdBool         SdAst_Function_HasVariableLengthArgumentList(SdValue_r self);
+SdList_r       SdAst_Function_ReturnTypes(SdValue_r self);
 
-SdValue_r      SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_names);
+SdValue_r      SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_var_refs);
 SdValue_r      SdAst_Parameter_Identifier(SdValue_r self);
-SdList_r       SdAst_Parameter_TypeNames(SdValue_r self);
+SdList_r       SdAst_Parameter_TypeVarRefs(SdValue_r self);
    
 SdValue_r      SdAst_Body_New(SdEnv_r env, SdList* statements);
 SdList_r       SdAst_Body_Statements(SdValue_r self);

@@ -2128,7 +2128,7 @@ SdValue_r SdEnv_Root_New(SdEnv_r env) {
 
 /* SdAst *************************************************************************************************************/
 /* A simple macro-based DSL for implementing the AST node functions. */
-#define SdAst_MAX_NODE_VALUES 6
+#define SdAst_MAX_NODE_VALUES 7
 #define SdAst_BEGIN(node_type) \
    SdValue_r values[SdAst_MAX_NODE_VALUES]; \
    int i = 0; \
@@ -2229,19 +2229,21 @@ SdAst_LIST_GETTER(SdAst_Program_Functions, SdNodeType_PROGRAM, 1)
 SdAst_LIST_GETTER(SdAst_Program_Statements, SdNodeType_PROGRAM, 2)
 
 SdValue_r SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameters, SdValue_r body,
-   SdBool is_imported, SdBool has_var_args) {
+   SdBool is_imported, SdBool has_var_args, SdList* return_types) {
    SdAst_BEGIN(SdNodeType_FUNCTION)
 
    SdAssert(env);
    SdAssertNonEmptyString(function_name);
    SdAssertAllNodesOfType(parameters, SdNodeType_PARAMETER);
    SdAssertNode(body, SdNodeType_BODY);
+   SdAssertAllNodesOfType(return_types, SdNodeType_VAR_REF);
 
    SdAst_STRING(function_name)
    SdAst_LIST(parameters)
    SdAst_VALUE(body)
    SdAst_BOOL(is_imported)
    SdAst_BOOL(has_var_args)
+   SdAst_LIST(return_types)
    SdAst_END
 }
 SdAst_VALUE_GETTER(SdAst_Function_Name, SdNodeType_FUNCTION, 1)
@@ -2249,20 +2251,21 @@ SdAst_VALUE_GETTER(SdAst_Function_Parameters, SdNodeType_FUNCTION, 2)
 SdAst_VALUE_GETTER(SdAst_Function_Body, SdNodeType_FUNCTION, 3)
 SdAst_BOOL_GETTER(SdAst_Function_IsImported, SdNodeType_FUNCTION, 4)
 SdAst_BOOL_GETTER(SdAst_Function_HasVariableLengthArgumentList, SdNodeType_FUNCTION, 5)
+SdAst_LIST_GETTER(SdAst_Function_ReturnTypes, SdNodeType_FUNCTION, 6)
 
-SdValue_r SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_names) {
+SdValue_r SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_var_refs) {
    SdAst_BEGIN(SdNodeType_PARAMETER)
    
    SdAssert(env);
    SdAssertNonEmptyString(identifier);
-   SdAssertAllValuesOfType(type_names, SdType_STRING);
+   SdAssertAllNodesOfType(type_var_refs, SdNodeType_VAR_REF);
    
    SdAst_STRING(identifier)
-   SdAst_LIST(type_names)
+   SdAst_LIST(type_var_refs)
    SdAst_END
 }
 SdAst_VALUE_GETTER(SdAst_Parameter_Identifier, SdNodeType_PARAMETER, 1)
-SdAst_LIST_GETTER(SdAst_Parameter_TypeNames, SdNodeType_PARAMETER, 2)
+SdAst_LIST_GETTER(SdAst_Parameter_TypeVarRefs, SdNodeType_PARAMETER, 2)
 
 SdValue_r SdAst_Body_New(SdEnv_r env, SdList* statements) {
    SdAst_BEGIN(SdNodeType_BODY)
@@ -3499,7 +3502,9 @@ static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue
    SdResult result = SdResult_SUCCESS;
    SdBool is_imported = SdFalse;
    SdString* function_name = NULL;
+   SdString* type_name = NULL;
    SdList* parameter_names = NULL;
+   SdList* return_types = NULL;
    SdValue_r body = NULL;
    SdBool has_var_args = SdFalse;
 
@@ -3523,13 +3528,28 @@ static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue
          SdList_Append(parameter_names, parameter);
       }
       SdParser_READ_EXPECT_TYPE(SdTokenType_CLOSE_PAREN);
-   } else {
+   } else { /* variable argument list */
       SdString* param_name = NULL;
       SdParser_READ_IDENTIFIER(param_name);
       SdList_Append(parameter_names, SdAst_Parameter_New(env, param_name, SdList_New()));
       has_var_args = SdTrue;
    }
 
+   return_types = SdList_New();
+   if (SdScanner_PeekType(scanner) == SdTokenType_COLON) {
+      SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
+      SdParser_READ_IDENTIFIER(type_name);
+      SdList_Append(return_types, SdAst_VarRef_New(env, type_name));
+      type_name = NULL;
+      
+      while (SdScanner_PeekType(scanner) == SdTokenType_PIPE) {
+         SdParser_READ_EXPECT_TYPE(SdTokenType_PIPE);
+         SdParser_READ_IDENTIFIER(type_name);
+         SdList_Append(return_types, SdAst_VarRef_New(env, type_name));
+         type_name = NULL;
+      }
+   }
+   
    if (is_imported) {
       body = SdAst_Body_New(env, SdList_New());
    } else {
@@ -3548,10 +3568,13 @@ static SdResult SdParser_ParseFunction(SdEnv_r env, SdScanner_r scanner, SdValue
       }
    }
 
-   *out_node = SdAst_Function_New(env, function_name, parameter_names, body, is_imported, has_var_args);
+   *out_node = SdAst_Function_New(env, function_name, parameter_names, body, is_imported, has_var_args, return_types);
    function_name = NULL;
    parameter_names = NULL;
+   return_types = NULL;
 end:
+   if (type_name) SdString_Delete(type_name);
+   if (return_types) SdList_Delete(return_types);
    if (function_name) SdString_Delete(function_name);
    if (parameter_names) SdList_Delete(parameter_names);
    return result;
@@ -3562,31 +3585,31 @@ static SdResult SdParser_ParseParameter(SdEnv_r env, SdScanner_r scanner, SdValu
    SdResult result = SdResult_SUCCESS;
    SdString* identifier = NULL;
    SdString* type_name = NULL;
-   SdList* type_names = NULL;
+   SdList* type_var_refs = NULL;
    
    SdParser_READ_IDENTIFIER(identifier);
-   type_names = SdList_New();
+   type_var_refs = SdList_New();
    if (SdScanner_PeekType(scanner) == SdTokenType_COLON) {
       SdParser_READ_EXPECT_TYPE(SdTokenType_COLON);
       SdParser_READ_IDENTIFIER(type_name);
-      SdList_Append(type_names, SdEnv_BoxString(env, type_name));
+      SdList_Append(type_var_refs, SdAst_VarRef_New(env, type_name));
       type_name = NULL;
       
       while (SdScanner_PeekType(scanner) == SdTokenType_PIPE) {
          SdParser_READ_EXPECT_TYPE(SdTokenType_PIPE);
          SdParser_READ_IDENTIFIER(type_name);
-         SdList_Append(type_names, SdEnv_BoxString(env, type_name));
+         SdList_Append(type_var_refs, SdAst_VarRef_New(env, type_name));
          type_name = NULL;
       }
    }
    
-   *out_node = SdAst_Parameter_New(env, identifier, type_names);
+   *out_node = SdAst_Parameter_New(env, identifier, type_var_refs);
    identifier = NULL;
-   type_names = NULL;
+   type_var_refs = NULL;
 end:
    if (identifier) SdString_Delete(identifier);
    if (type_name) SdString_Delete(type_name);
-   if (type_names) SdList_Delete(type_names);
+   if (type_var_refs) SdList_Delete(type_var_refs);
    return result;
    
 }
@@ -3741,7 +3764,8 @@ static SdResult SdParser_ParseClosure(SdEnv_r env, SdScanner_r scanner, SdValue_
       body = SdAst_Body_New(env, statements);
    }
 
-   *out_node = SdAst_Function_New(env, SdString_FromCStr("(closure)"), param_names, body, SdFalse, SdFalse);
+   *out_node = SdAst_Function_New(env, SdString_FromCStr("(closure)"), param_names, body, SdFalse, SdFalse,
+       SdList_New());
    param_names = NULL;
 end:
    if (param_names) SdList_Delete(param_names);
@@ -4420,7 +4444,7 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    SdValue_r* out_return) {
    SdResult result = SdResult_SUCCESS;
    SdValue_r function = NULL, call_frame = NULL, total_arguments_value = NULL, actual_function_name = NULL;
-   SdList_r parameters = NULL, partial_arguments = NULL, total_arguments = NULL;
+   SdList_r parameters = NULL, partial_arguments = NULL, total_arguments = NULL, return_types = NULL;
    SdBool has_var_args = SdFalse, in_call = SdFalse, gc_needed = SdFalse;
    size_t i = 0, count = 0, partial_arguments_count = 0, total_arguments_count = 0;
 
@@ -4495,24 +4519,23 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
       count = SdList_Count(total_arguments);
       for (i = 0; i < count; i++) {
          SdValue_r parameter = NULL, argument = NULL;
-         SdList_r type_names = NULL;
+         SdList_r type_var_refs = NULL;
          size_t type_count = 0;
          
          parameter = SdList_GetAt(parameters, i);
          argument = SdList_GetAt(total_arguments, i);
-         type_names = SdAst_Parameter_TypeNames(parameter);
-         type_count = SdList_Count(type_names);
+         type_var_refs = SdAst_Parameter_TypeVarRefs(parameter);
+         type_count = SdList_Count(type_var_refs);
          
-         if (type_count > 0) {
+         if (type_count > 0 && SdValue_Type(argument) != SdType_ERROR) {
             SdBool is_match = SdFalse;
             size_t j = 0;
             
             for (j = 0; j < type_count; j++) {
-               SdString_r type_name = NULL;
-               SdValue_r slot = NULL, type_val = NULL;
+               SdValue_r type_var_ref = NULL, slot = NULL, type_val = NULL;
                
-               type_name = SdValue_GetString(SdList_GetAt(type_names, j));
-               slot = SdEnv_FindVariableSlot(self->env, frame, type_name, SdTrue);
+               type_var_ref = SdList_GetAt(type_var_refs, j);
+               slot = SdEnv_ResolveVarRefToSlot(self->env, SdEnv_Root_BottomFrame(SdEnv_Root(self->env)), type_var_ref);
                if (!slot) {
                   result = SdFail(SdErr_UNDECLARED_VARIABLE, "Type annotation must evaluate to a type.");
                   goto end;
@@ -4565,11 +4588,49 @@ static SdResult SdEngine_CallClosure(SdEngine_r self, SdValue_r frame, SdValue_r
    /* execute the function body using the frame we just constructed */
    result = SdEngine_ExecuteBody(self, call_frame, SdAst_Function_Body(function), out_return);
 
-end:
    /* if the function did not return a value, then implicitly return a nil */
    if (!*out_return)
       *out_return = SdEnv_BoxNil(self->env);
-
+   
+   /* check the return value against any defined return type annotations */
+   return_types = SdAst_Function_ReturnTypes(function);
+   if (SdList_Count(return_types) > 0) {
+      SdValue_r argument = NULL;
+      size_t type_count = 0;
+      
+      argument = *out_return;
+      SdAssert(argument);
+      type_count = SdList_Count(return_types);
+      
+      if (type_count > 0) {
+         SdBool is_match = SdFalse;
+         size_t j = 0;
+         
+         for (j = 0; j < type_count; j++) {
+            SdValue_r type_var_ref = NULL, slot = NULL, type_val = NULL;
+            
+            type_var_ref = SdList_GetAt(return_types, j);
+            slot = SdEnv_ResolveVarRefToSlot(self->env, SdEnv_Root_BottomFrame(SdEnv_Root(self->env)), type_var_ref);
+            if (!slot) {
+               result = SdFail(SdErr_UNDECLARED_VARIABLE, "Type annotation must evaluate to a type.");
+               goto end;
+            }
+            type_val = SdEnv_VariableSlot_Value(slot);
+            if (SdValue_Equals(argument, type_val)) {
+               is_match = SdTrue;
+               break;
+            }
+         }
+         
+         if (!is_match) {
+            result = SdFailWithStringSuffix(SdErr_TYPE_MISMATCH, "Return type mismatch in function: ",
+               SdValue_GetString(actual_function_name));
+            goto end;
+         }
+      }
+   }
+   
+end:
    if (in_call) SdEnv_PopCall(self->env);
    if (call_frame) SdEnv_EndFrame(self->env, call_frame);
    return result;

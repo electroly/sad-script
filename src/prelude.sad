@@ -106,7 +106,7 @@ function false? (self) = [self = false]
 function printv (x) = (print (to-string x))
 function != (a b) = (not [a = b])
 
-function die! (x) { // allow die to be used in an expression
+function die! (x:String) { // allow die to be used in an expression
    die x
 }
 
@@ -115,25 +115,23 @@ function println (x) {
    (print "\n")
 }
 
-function list.append! (self value) {
+function list.append! (self:List value) {
    var index = (list.length self)
    [self list.insert-at! index value]
 }
 
-function += (self item) = [self list.append! item]
+function += (self:List item) = [self list.append! item]
 
-function @ (self index) = match {
+function @ (self:String|List index) = match {
    case String Int: [self string.get-at index]
    case List Int: [self list.get-at index]
-   default: (die! "Expected (String Int) or (List Int).")
 }
 
-function @= (self index value) = [self list.set-at! index value]
+function @= (self:List index value) = [self list.set-at! index value]
 
-function length (self) = match {
+function length (self:String|List) = match {
    case String: [self string.length]
    case List: [self list.length]
-   default: (die! "Expected String or List.")
 }
 
 function pipe pipeline {
@@ -162,12 +160,12 @@ function compare (x y) {
 }
 
 // returns (list is-exact index)
-function binary-search (key-selector-func search-key lst) {
+function binary-search (key-selector-func:Function search-key lst:List) {
    return (binary-search-with-custom-comparator compare key-selector-func search-key lst)
 }
 
 // returns (list is-exact index)
-function binary-search-with-custom-comparator (compare-func key-selector-func search-key lst) {
+function binary-search-with-custom-comparator (compare-func:Function key-selector-func:Function search-key lst:List) {
    var first = 0
    var last = [(list.length lst) - 1]
 
@@ -229,7 +227,7 @@ function max (xs) {
    return max-value
 }
 
-function list.< (x y) {
+function list.< (x:List y:List) {
    var x-length = (length x)
    var y-length = (length y)
    var min-length = (min (list x-length y-length))
@@ -241,7 +239,7 @@ function list.< (x y) {
    return [x-length < y-length]
 }
 
-function bool.< (x y) = match {
+function bool.< (x:Bool y:Bool) = match {
    case false true: true
    default: false
 }
@@ -274,7 +272,7 @@ function >= (x y) {
    return (not [x < y])
 }
 
-function abs (x) {
+function abs (x:Int) {
    if [x < 0] {
       return [-1 * x]
    } else {
@@ -287,13 +285,12 @@ function abs (x) {
 // The stream is a function.  You call the stream and it returns an iterator.
 // The iterator is a function.  You call the iterator repeatedly and it returns a value, or nil to signal the end.
 
-function to-stream (x) = match {
+function to-stream (x:List|Function) = match {
    case List: (list.to-stream x)
    case Function: x
-   default: (error "Invalid type.")
 }
 
-function list.to-stream (lst) = \() {
+function list.to-stream (lst:List) = \() {
    var i = 0
    var n = (list.length lst)
    return \() {
@@ -307,7 +304,7 @@ function list.to-stream (lst) = \() {
    }
 }
 
-function to-list (xs) {
+function to-list (xs:List|Function) {
    switch {
       case List: {
          return xs
@@ -318,9 +315,6 @@ function to-list (xs) {
             [lst += x]
          }
          return lst
-      }
-      default: {
-         die "Expected a list or stream."
       }
    }
 }
