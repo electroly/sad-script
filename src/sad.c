@@ -48,7 +48,7 @@ extern unsigned long sd_num_reallocs;
 
 int main(int argc, char* argv[]) {
    int ret = 0;
-   SdResult result = SdResult_SUCCESS;
+   SdResult result;
    Sad* sad = NULL;
    SdString* prelude_path = NULL;
    SdString* file_path = NULL;

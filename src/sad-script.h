@@ -43,36 +43,17 @@ typedef int SdBool;
 extern "C" {
 #endif
 
-/*********************************************************************************************************************/
-
 /* A raw pointer means that ownership is being transferred.
    An _r typedef means that a pointer is only being borrowed; ownership is not transferred. */
 typedef struct SdResult_s SdResult;
-typedef struct SdSearchResult_s SdSearchResult;
 typedef struct Sad_s Sad;
 typedef struct Sad_s* Sad_r;
 typedef struct SdString_s SdString;
 typedef struct SdString_s* SdString_r;
-typedef struct SdStringBuf_s SdStringBuf;
-typedef struct SdStringBuf_s* SdStringBuf_r;
 typedef struct SdValue_s SdValue;
 typedef struct SdValue_s* SdValue_r;
 typedef struct SdList_s SdList;
 typedef struct SdList_s* SdList_r;
-typedef struct SdEnv_s SdEnv;
-typedef struct SdEnv_s* SdEnv_r;
-typedef struct SdValueSet_s SdValueSet;
-typedef struct SdValueSet_s* SdValueSet_r;
-typedef struct SdChain_s SdChain;
-typedef struct SdChain_s* SdChain_r;
-typedef struct SdChainNode_s SdChainNode;
-typedef struct SdChainNode_s* SdChainNode_r;
-typedef struct SdToken_s SdToken;
-typedef struct SdToken_s* SdToken_r;
-typedef struct SdScanner_s SdScanner;
-typedef struct SdScanner_s* SdScanner_r;
-typedef struct SdEngine_s SdEngine;
-typedef struct SdEngine_s* SdEngine_r;
 
 /* Data Structures ***************************************************************************************************/
 typedef enum SdErr_e {
@@ -90,7 +71,6 @@ typedef enum SdErr_e {
 } SdErr;
 
 typedef enum SdType_e {
-   /* These numeric values are used by (get-type) and must not change. */
    SdType_NIL = 0,
    SdType_INT = 1,
    SdType_DOUBLE = 2,
@@ -98,131 +78,20 @@ typedef enum SdType_e {
    SdType_STRING = 4,
    SdType_LIST = 5,
    SdType_MUTALIST = 6,
-
-   /* these are really just lists, but with unique types to distinguish them from general purpose lists */
-   SdType_FUNCTION = 7,
-   SdType_ERROR = 8,
-
-   /* this is really just an integer, but with a unique type to distinguish it from general purpose numbers */
-   SdType_TYPE = 9,
-
-   /* can't create a value of this type, it exists only so we can deal with the type itself in pattern matching */
-   SdType_ANY = 10
+   SdType_FUNCTION = 7, /* really a list */
+   SdType_ERROR = 8, /* really a list */
+   SdType_TYPE = 9, /* really an integer */
+   SdType_ANY = 10 /* can't create a value of this type; exists only for pattern matching*/
 } SdType;
-
-typedef enum SdTokenType_e {
-   SdTokenType_NONE = 0, /* indicates the lack of a token */
-   SdTokenType_INT_LIT,
-   SdTokenType_DOUBLE_LIT,
-   SdTokenType_BOOL_LIT,
-   SdTokenType_STRING_LIT,
-   SdTokenType_OPEN_PAREN,
-   SdTokenType_CLOSE_PAREN,
-   SdTokenType_OPEN_BRACKET,
-   SdTokenType_CLOSE_BRACKET,
-   SdTokenType_OPEN_BRACE,
-   SdTokenType_CLOSE_BRACE,
-   SdTokenType_COLON,
-   SdTokenType_IDENTIFIER,
-   SdTokenType_FUNCTION,
-   SdTokenType_VAR,
-   SdTokenType_SET,
-   SdTokenType_IF,
-   SdTokenType_ELSE,
-   SdTokenType_ELSEIF,
-   SdTokenType_FOR,
-   SdTokenType_FROM,
-   SdTokenType_TO,
-   SdTokenType_AT,
-   SdTokenType_IN,
-   SdTokenType_WHILE,
-   SdTokenType_DO,
-   SdTokenType_SWITCH,
-   SdTokenType_CASE,
-   SdTokenType_DEFAULT,
-   SdTokenType_RETURN,
-   SdTokenType_DIE,
-   SdTokenType_IMPORT,
-   SdTokenType_NIL,
-   SdTokenType_LAMBDA,
-   SdTokenType_MATCH,
-   SdTokenType_PIPE
-} SdTokenType;
-
-typedef enum SdNodeType_e {
-   /* Environment */
-   SdNodeType_ROOT = 0,
-   SdNodeType_FRAME,
-   SdNodeType_VAR_SLOT,
-   SdNodeType_CLOSURE,
-   SdNodeType_CALL_TRACE,
-
-   /* Blocks */
-   SdNodeType_PROGRAM,
-   SdNodeType_BODY,
-
-   /* Block or expression (depending on the context) */
-   SdNodeType_FUNCTION,
-
-   /* Expressions */
-   SdNodeType_INT_LIT,
-   SdNodeType_DOUBLE_LIT,
-   SdNodeType_BOOL_LIT,
-   SdNodeType_STRING_LIT,
-   SdNodeType_NIL_LIT,
-   SdNodeType_VAR_REF,
-   SdNodeType_MATCH,
-
-   /* Statement or expression (depending on the context) */
-   SdNodeType_CALL,
-
-   /* Statements */
-   SdNodeType_VAR,
-   SdNodeType_SET,
-   SdNodeType_MULTI_VAR,
-   SdNodeType_MULTI_SET,
-   SdNodeType_IF,
-   SdNodeType_FOR,
-   SdNodeType_FOREACH,
-   SdNodeType_WHILE,
-   SdNodeType_DO,
-   SdNodeType_SWITCH,
-   SdNodeType_RETURN,
-   SdNodeType_DIE,
-
-   /* Sub-components */
-   SdNodeType_ELSEIF,
-   SdNodeType_SWITCH_CASE,
-   SdNodeType_MATCH_CASE,
-   SdNodeType_PARAMETER,
-
-   SdNodeType_BLOCKS_FIRST = SdNodeType_PROGRAM,
-   SdNodeType_BLOCKS_LAST = SdNodeType_FUNCTION,
-   SdNodeType_EXPRESSIONS_FIRST = SdNodeType_FUNCTION,
-   SdNodeType_EXPRESSIONS_LAST = SdNodeType_CALL,
-   SdNodeType_STATEMENTS_FIRST = SdNodeType_CALL,
-   SdNodeType_STATEMENTS_LAST = SdNodeType_DIE
-} SdNodeType;
 
 struct SdResult_s {
    SdErr code;
 };
 
-struct SdSearchResult_s {
-   size_t index; /* could be one past the end of the list if search name > everything */
-   SdBool exact; /* true = index is an exact match, false = index is the next highest match */
-};
-
-typedef int (*SdSearchCompareFunc)(SdValue_r lhs, void* context);
-
 /* SdResult ***********************************************************************************************************/
-extern SdResult SdResult_SUCCESS;
-
-SdResult       SdFail(SdErr code, const char* message);
-SdResult       SdFailWithStringSuffix(SdErr code, const char* message, SdString_r suffix);
 SdBool         SdFailed(SdResult result);
 const char*    SdGetLastFailMessage(void);
-   
+
 /* Sad ***************************************************************************************************************/
 SdErr          SdRunScript(const char* prelude_file_path, const char* script_code);
 
@@ -230,7 +99,6 @@ Sad*           Sad_New(void);
 void           Sad_Delete(Sad* self);
 SdResult       Sad_AddScript(Sad_r self, const char* code);
 SdResult       Sad_Execute(Sad_r self);
-SdEnv_r        Sad_Env(Sad_r self);
 
 /* SdString **********************************************************************************************************/
 SdString*      SdString_New(void);
@@ -242,28 +110,7 @@ SdBool         SdString_EqualsCStr(SdString_r a, const char* b);
 size_t         SdString_Length(SdString_r self);
 int            SdString_Compare(SdString_r a, SdString_r b);
 
-/* SdStringBuf *******************************************************************************************************/
-SdStringBuf*   SdStringBuf_New(void);
-void           SdStringBuf_Delete(SdStringBuf* self);
-void           SdStringBuf_AppendString(SdStringBuf_r self, SdString_r suffix);
-void           SdStringBuf_AppendCStr(SdStringBuf_r self, const char* suffix);
-void           SdStringBuf_AppendChar(SdStringBuf_r self, char ch);
-void           SdStringBuf_AppendInt(SdStringBuf_r self, int number);
-const char*    SdStringBuf_CStr(SdStringBuf_r self);
-void           SdStringBuf_Clear(SdStringBuf_r self);
-size_t         SdStringBuf_Length(SdStringBuf_r self);
-
 /* SdValue ***********************************************************************************************************/
-SdValue*       SdValue_NewNil(void);
-SdValue*       SdValue_NewInt(int x);
-SdValue*       SdValue_NewDouble(double x);
-SdValue*       SdValue_NewBool(SdBool x);
-SdValue*       SdValue_NewString(SdString* x);
-SdValue*       SdValue_NewList(SdList* x);
-SdValue*       SdValue_NewFunction(SdList* x);
-SdValue*       SdValue_NewError(SdList* x);
-SdValue*       SdValue_NewType(SdType x);
-void           SdValue_Delete(SdValue* self);
 SdType         SdValue_Type(SdValue_r self);
 int            SdValue_GetInt(SdValue_r self);
 double         SdValue_GetDouble(SdValue_r self);
@@ -272,10 +119,6 @@ SdString_r     SdValue_GetString(SdValue_r self);
 SdList_r       SdValue_GetList(SdValue_r self);
 SdBool         SdValue_Equals(SdValue_r a, SdValue_r b);
 int            SdValue_Hash(SdValue_r self);
-
-/* Used only by the garbage collector */
-SdBool         SdValue_IsGcMarked(SdValue_r self);
-void           SdValue_SetGcMark(SdValue_r self, SdBool mark);
 
 /* SdList ************************************************************************************************************/
 SdList*        SdList_New(void);
@@ -290,288 +133,12 @@ SdValue_r      SdList_GetAt(SdList_r self, size_t index);
 size_t         SdList_Count(SdList_r self);
 SdValue_r      SdList_RemoveAt(SdList_r self, size_t index);
 void           SdList_Clear(SdList_r self);
-SdSearchResult SdList_Search(SdList_r list, SdSearchCompareFunc compare_func, void* context); /* list must be sorted */
-SdBool         SdList_InsertBySearch(SdList_r list, SdValue_r item, SdSearchCompareFunc compare_func, void* context);
 SdBool         SdList_Equals(SdList_r a, SdList_r b);
 SdList*        SdList_Clone(SdList_r self);
 
 /* SdFile ************************************************************************************************************/
 SdResult       SdFile_WriteAllText(SdString_r file_path, SdString_r text);
 SdResult       SdFile_ReadAllText(SdString_r file_path, SdString** out_text);
-
-/* SdEnv **************************************************************************************************************
-            0       |    1             |    2                 |    3                   |     4
-Root: --------------+------------------+----------------------+------------------------+----------------------------
-   (list ROOT       | Lst<Function>    | Lst<Statement>       | bottom:Frame)          | 
-                    | (sorted by name) |                      |                        | 
-Frame: -------------+------------------+----------------------+------------------------+----------------------------
-   (list FRAME      | parent:Frame?    | Lst<VariableSlot>)   |                        | 
-                    |                  | (sorted by name)     |                        | 
-VariableSlot: ------+------------------+----------------------+------------------------+----------------------------
-   (list VAR_SLOT   | name:Str         | payload:Value)       |                        | 
-Closure: -----------+------------------+----------------------+------------------------+----------------------------
-   (list CLOSURE    | context:Frame    | function-node:Func   | partial-arg-values:Lst)|
-CallTrace: ---------+------------------+----------------------+------------------------+----------------------------
-   (list CALL_TRACE | name:Str         | args:Lst<*>          | calling-frame:Frame)   |
-*/
-SdEnv*         SdEnv_New(void);
-void           SdEnv_Delete(SdEnv* self);
-SdValue_r      SdEnv_Root(SdEnv_r self);
-SdValue_r      SdEnv_AddToGc(SdEnv_r self, SdValue* value);
-SdResult       SdEnv_AddProgramAst(SdEnv_r self, SdValue_r program_node);
-void           SdEnv_CollectGarbage(SdEnv_r self);
-SdResult       SdEnv_DeclareVar(SdEnv_r self, SdValue_r frame, SdValue_r name, SdValue_r value);
-SdValue_r      SdEnv_ResolveVarRefToSlot(SdEnv_r self, SdValue_r frame, SdValue_r var_ref); /* may be null */
-SdValue_r      SdEnv_FindVariableSlot(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse); /* may be null */
-SdValue_r      SdEnv_FindVariableSlotLocation(SdEnv_r self, SdValue_r frame, SdString_r name, SdBool traverse, 
-                  int* out_frame_hops, int* out_index_in_frame); /* may be null */
-SdValue_r      SdEnv_BeginFrame(SdEnv_r self, SdValue_r parent);
-void           SdEnv_EndFrame(SdEnv_r self, SdValue_r frame);
-void           SdEnv_PushCall(SdEnv_r self, SdValue_r calling_frame, SdValue_r name, SdValue_r arguments);
-void           SdEnv_PopCall(SdEnv_r self);
-void           SdEnv_PushProtectedValue(SdEnv_r self, SdValue_r value);
-void           SdEnv_PopProtectedValue(SdEnv_r self);
-SdValue_r      SdEnv_GetCurrentCallTrace(SdEnv_r self); /* may be null */
-SdChain_r      SdEnv_GetCallTraceChain(SdEnv_r self);
-
-SdValue_r      SdEnv_BoxNil(SdEnv_r env);
-SdValue_r      SdEnv_BoxInt(SdEnv_r env, int x);
-SdValue_r      SdEnv_BoxDouble(SdEnv_r env, double x);
-SdValue_r      SdEnv_BoxBool(SdEnv_r env, SdBool x);
-SdValue_r      SdEnv_BoxString(SdEnv_r env, SdString* x);
-SdValue_r      SdEnv_BoxList(SdEnv_r env, SdList* x);
-SdValue_r      SdEnv_BoxFunction(SdEnv_r env, SdList* x);
-SdValue_r      SdEnv_BoxError(SdEnv_r env, SdList* x);
-SdValue_r      SdEnv_BoxType(SdEnv_r env, SdType x);
-
-SdValue_r      SdEnv_Root_New(SdEnv_r env);
-SdList_r       SdEnv_Root_Functions(SdValue_r self);
-SdList_r       SdEnv_Root_Statements(SdValue_r self);
-SdValue_r      SdEnv_Root_BottomFrame(SdValue_r self);
-
-SdValue_r      SdEnv_Frame_New(SdEnv_r env, SdValue_r parent_or_null);
-SdValue_r      SdEnv_Frame_Parent(SdValue_r self); /* may be nil */
-SdList_r       SdEnv_Frame_VariableSlots(SdValue_r self);
-
-SdValue_r      SdEnv_VariableSlot_New(SdEnv_r env, SdValue_r name, SdValue_r value);
-SdString_r     SdEnv_VariableSlot_Name(SdValue_r self);
-SdValue_r      SdEnv_VariableSlot_Value(SdValue_r self);
-void           SdEnv_VariableSlot_SetValue(SdValue_r self, SdValue_r value);
-
-SdValue_r      SdEnv_Closure_New(SdEnv_r env, SdValue_r frame, SdValue_r function_node, SdValue_r partial_arguments);
-SdValue_r      SdEnv_Closure_Frame(SdValue_r self);
-SdValue_r      SdEnv_Closure_FunctionNode(SdValue_r self);
-SdValue_r      SdEnv_Closure_PartialArguments(SdValue_r self);
-SdValue_r      SdEnv_Closure_CopyWithPartialArguments(SdValue_r self, SdEnv_r env, SdList_r arguments);
-
-SdValue_r      SdEnv_CallTrace_New(SdEnv_r env, SdValue_r name, SdValue_r arguments, SdValue_r calling_frame);
-SdValue_r      SdEnv_CallTrace_Name(SdValue_r self);
-SdValue_r      SdEnv_CallTrace_Arguments(SdValue_r self);
-SdValue_r      SdEnv_CallTrace_CallingFrame(SdValue_r self);
-
-/* SdAst **************************************************************************************************************
-            0       |    1                    |    2                |    3          |    4          |    5
---------------------+-------------------------+---------------------+---------------+---------------|---------------
-   (list PROGRAM    | Lst<Function>           | Lst<Statement>)     |               |               |
-   (list FUNCTION 1-name:Str 2-params:Lst<Param> 3-Body 4-imported:Bool 5-var-args:Bool 6-return-types:Lst<VarRef>
-   (list PARAMETER  | name:Str                | types:Lst<VarRef>)  |               |               |
-Statement: ---------+-------------------------+---------------------+---------------+---------------|---------------
-   (list CALL       | function-name:VarRef    | args:Lst<Expr>)     |               |               |
-   (list VAR        | variable-name:Str       | value:Expr)         |               |               | 
-   (list SET        | variable-name:VarRef    | value:Expr)         |               |               |
-   (list MULTI_VAR  | variable-names:Lst<Str> | value:Expr)         |               |               | 
-   (list MULTI_SET  | var-names:Lst<VarRef>   | value:Expr)         |               |               |
-   (list IF         | condition:Expr          | if-true:Body        | Lst<ElseIf>   | else:Body)    | 
-   (list FOR        | variable-name:Str       | start:Expr          | stop:Expr     | Body)         | 
-   (list FOREACH    | iter-name:Str           | index-name:Str?     | haystack:Expr | Body)         | 
-   (list WHILE      | condition:Expr          | Body)               |               |               | 
-   (list DO         | condition:Expr          | Body)               |               |               | 
-   (list SWITCH     | Lst<Expr>               | Lst<SwitchCase>     | default:Body) |               | 
-   (list RETURN     | Expr)                   |                     |               |               | 
-   (list DIE        | Expr)                   |                     |               |               | 
-Expr: --------------+-------------------------+---------------------+---------------+---------------|---------------
-   (list INT_LIT    | Int)                    |                     |               |               | 
-   (list DOUBLE_LIT | Double)                 |                     |               |               | 
-   (list BOOL_LIT   | Bool)                   |                     |               |               | 
-   (list STRING_LIT | Str)                    |                     |               |               | 
-   (list NIL_LIT)   |                         |                     |               |               |
-   (list VAR_REF    | identifier:Str          | frame-hops:Int?     | index:Int?)   |               |
-   (list MATCH      | Lst<Expr>               | Lst<MatchCase>      | default:Expr) |               | 
-   (list CALL ^     | ...                     |                     |               |               | 
-   (list FUNCTION ^ | ...                     |                     |               |               | 
---------------------+-------------------------+---------------------+---------------+---------------|---------------
-   (list ELSEIF     | condition:Expr          | Body)               |               |               |
-   (list SWITCH_CASE| Lst<Expr>               | Body)               |               |               |
-   (list MATCH_CASE | Lst<Expr>               | Expr)               |               |               |
-   (list BODY       | Lst<Statement>)         |                     |               |               |
-*/
-SdNodeType     SdAst_NodeType(SdValue_r node);
-
-SdValue_r      SdAst_Program_New(SdEnv_r env, SdList* functions, SdList* statements);
-SdList_r       SdAst_Program_Functions(SdValue_r self);
-SdList_r       SdAst_Program_Statements(SdValue_r self);
-
-SdValue_r      SdAst_Function_New(SdEnv_r env, SdString* function_name, SdList* parameters, SdValue_r body,
-                  SdBool is_imported, SdBool has_var_args, SdList* return_types);
-SdValue_r      SdAst_Function_Name(SdValue_r self);
-SdValue_r      SdAst_Function_Body(SdValue_r self);
-SdValue_r      SdAst_Function_Parameters(SdValue_r self);
-SdBool         SdAst_Function_IsImported(SdValue_r self);
-SdBool         SdAst_Function_HasVariableLengthArgumentList(SdValue_r self);
-SdList_r       SdAst_Function_ReturnTypes(SdValue_r self);
-
-SdValue_r      SdAst_Parameter_New(SdEnv_r env, SdString* identifier, SdList* type_var_refs);
-SdValue_r      SdAst_Parameter_Identifier(SdValue_r self);
-SdList_r       SdAst_Parameter_TypeVarRefs(SdValue_r self);
-   
-SdValue_r      SdAst_Body_New(SdEnv_r env, SdList* statements);
-SdList_r       SdAst_Body_Statements(SdValue_r self);
-
-SdValue_r      SdAst_Call_New(SdEnv_r env, SdValue_r var_ref, SdList* arguments);
-SdValue_r      SdAst_Call_VarRef(SdValue_r self);
-SdList_r       SdAst_Call_Arguments(SdValue_r self);
-
-SdValue_r      SdAst_Var_New(SdEnv_r env, SdString* variable_name, SdValue_r value_expr);
-SdValue_r      SdAst_Var_VariableName(SdValue_r self);
-SdValue_r      SdAst_Var_ValueExpr(SdValue_r self);
-
-SdValue_r      SdAst_Set_New(SdEnv_r env, SdValue_r var_ref, SdValue_r value_expr);
-SdValue_r      SdAst_Set_VarRef(SdValue_r self);
-SdValue_r      SdAst_Set_ValueExpr(SdValue_r self);
-
-SdValue_r      SdAst_MultiVar_New(SdEnv_r env, SdList* variable_names, SdValue_r value_expr);
-SdList_r       SdAst_MultiVar_VariableNames(SdValue_r self);
-SdValue_r      SdAst_MultiVar_ValueExpr(SdValue_r self);
-
-SdValue_r      SdAst_MultiSet_New(SdEnv_r env, SdList* var_refs, SdValue_r value_expr);
-SdList_r       SdAst_MultiSet_VarRefs(SdValue_r self);
-SdValue_r      SdAst_MultiSet_ValueExpr(SdValue_r self);
-
-SdValue_r      SdAst_If_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r true_body, SdList* else_ifs, 
-                  SdValue_r else_body);
-SdValue_r      SdAst_If_ConditionExpr(SdValue_r self);
-SdValue_r      SdAst_If_TrueBody(SdValue_r self);
-SdList_r       SdAst_If_ElseIfs(SdValue_r self);
-SdValue_r      SdAst_If_ElseBody(SdValue_r self);
-
-SdValue_r      SdAst_ElseIf_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body);
-SdValue_r      SdAst_ElseIf_ConditionExpr(SdValue_r self);
-SdValue_r      SdAst_ElseIf_Body(SdValue_r self);
-
-SdValue_r      SdAst_For_New(SdEnv_r env, SdString* variable_name, SdValue_r start_expr, SdValue_r stop_expr,
-                  SdValue_r body);
-SdValue_r      SdAst_For_VariableName(SdValue_r self);
-SdValue_r      SdAst_For_StartExpr(SdValue_r self);
-SdValue_r      SdAst_For_StopExpr(SdValue_r self);
-SdValue_r      SdAst_For_Body(SdValue_r self);
-
-SdValue_r      SdAst_ForEach_New(SdEnv_r env, SdString* iter_name, SdString* index_name_or_null, 
-                  SdValue_r haystack_expr, SdValue_r body);
-SdValue_r      SdAst_ForEach_IterName(SdValue_r self);
-SdValue_r      SdAst_ForEach_IndexName(SdValue_r self); /* may be null */
-SdValue_r      SdAst_ForEach_HaystackExpr(SdValue_r self);
-SdValue_r      SdAst_ForEach_Body(SdValue_r self);
-
-SdValue_r      SdAst_While_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body);
-SdValue_r      SdAst_While_ConditionExpr(SdValue_r self);
-SdValue_r      SdAst_While_Body(SdValue_r self);
-
-SdValue_r      SdAst_Do_New(SdEnv_r env, SdValue_r condition_expr, SdValue_r body);
-SdValue_r      SdAst_Do_ConditionExpr(SdValue_r self);
-SdValue_r      SdAst_Do_Body(SdValue_r self);
-
-SdValue_r      SdAst_Switch_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_body);
-SdList_r       SdAst_Switch_Exprs(SdValue_r self);
-SdList_r       SdAst_Switch_Cases(SdValue_r self);
-SdValue_r      SdAst_Switch_DefaultBody(SdValue_r self);
-
-SdValue_r      SdAst_SwitchCase_New(SdEnv_r env, SdList* exprs, SdValue_r body);
-SdList_r       SdAst_SwitchCase_IfExprs(SdValue_r self);
-SdValue_r      SdAst_SwitchCase_ThenBody(SdValue_r self);
-
-SdValue_r      SdAst_Return_New(SdEnv_r env, SdValue_r expr);
-SdValue_r      SdAst_Return_Expr(SdValue_r self);
-
-SdValue_r      SdAst_Die_New(SdEnv_r env, SdValue_r expr);
-SdValue_r      SdAst_Die_Expr(SdValue_r self);
-
-SdValue_r      SdAst_IntLit_New(SdEnv_r env, int value);
-SdValue_r      SdAst_IntLit_Value(SdValue_r self);
-
-SdValue_r      SdAst_DoubleLit_New(SdEnv_r env, double value);
-SdValue_r      SdAst_DoubleLit_Value(SdValue_r self);
-
-SdValue_r      SdAst_BoolLit_New(SdEnv_r env, SdBool value);
-SdValue_r      SdAst_BoolLit_Value(SdValue_r self);
-
-SdValue_r      SdAst_StringLit_New(SdEnv_r env, SdString* value);
-SdValue_r      SdAst_StringLit_Value(SdValue_r self);
-
-SdValue_r      SdAst_NilLit_New(SdEnv_r env);
-
-SdValue_r      SdAst_VarRef_New(SdEnv_r env, SdString* identifier);
-SdString_r     SdAst_VarRef_Identifier(SdValue_r self);
-SdValue_r      SdAst_VarRef_FrameHops(SdValue_r self);
-void           SdAst_VarRef_SetFrameHops(SdEnv_r env, SdValue_r self, int frame_hops);
-SdValue_r      SdAst_VarRef_IndexInFrame(SdValue_r self);
-void           SdAst_VarRef_SetIndexInFrame(SdEnv_r env, SdValue_r self, int index_in_frame);
-
-SdValue_r      SdAst_Match_New(SdEnv_r env, SdList* exprs, SdList* cases, SdValue_r default_expr);
-SdList_r       SdAst_Match_Exprs(SdValue_r self);
-SdList_r       SdAst_Match_Cases(SdValue_r self);
-SdValue_r      SdAst_Match_DefaultExpr(SdValue_r self);
-
-SdValue_r      SdAst_MatchCase_New(SdEnv_r env, SdList* if_exprs, SdValue_r then_expr);
-SdList_r       SdAst_MatchCase_IfExprs(SdValue_r self);
-SdValue_r      SdAst_MatchCase_ThenExpr(SdValue_r self);
-
-/* SdValueSet ********************************************************************************************************/
-SdValueSet*    SdValueSet_New(void);
-void           SdValueSet_Delete(SdValueSet* self);
-SdBool         SdValueSet_Add(SdValueSet_r self, SdValue_r item); /* true = added, false = already exists */
-SdBool         SdValueSet_Has(SdValueSet_r self, SdValue_r item);
-SdBool         SdValueSet_Remove(SdValueSet_r self, SdValue_r item); /* true = removed, false = wasn't there */
-SdList_r       SdValueSet_GetList(SdValueSet_r self);
-
-/* SdChain ***********************************************************************************************************/
-SdChain*       SdChain_New(void);
-void           SdChain_Delete(SdChain* self);
-size_t         SdChain_Count(SdChain_r self);
-void           SdChain_Push(SdChain_r self, SdValue_r item);
-SdValue_r      SdChain_Pop(SdChain_r self); /* may be null if the list is empty */
-SdChainNode_r  SdChain_Head(SdChain_r self); /* may be null if the list is empty */
-void           SdChain_Remove(SdChain_r self, SdChainNode_r node);
-
-SdValue_r      SdChainNode_Value(SdChainNode_r self);
-SdChainNode_r  SdChainNode_Prev(SdChainNode_r self); /* null for the head node */
-SdChainNode_r  SdChainNode_Next(SdChainNode_r self); /* null for the tail node */
-
-/* SdToken ***********************************************************************************************************/
-SdToken*       SdToken_New(int source_line, SdTokenType type, char* text);
-void           SdToken_Delete(SdToken* self);
-int            SdToken_SourceLine(SdToken_r self);
-SdTokenType    SdToken_Type(SdToken_r self);
-const char*    SdToken_Text(SdToken_r self);
-
-/* SdScanner *********************************************************************************************************/
-SdScanner*     SdScanner_New(void);
-void           SdScanner_Delete(SdScanner* self);
-void           SdScanner_Tokenize(SdScanner_r self, const char* text);
-SdBool         SdScanner_IsEof(SdScanner_r self);
-SdBool         SdScanner_Peek(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
-SdTokenType    SdScanner_PeekType(SdScanner_r self); /* SdTokenType_NONE if eof */
-SdToken_r      SdScanner_PeekToken(SdScanner_r self); /* may be null */
-SdBool         SdScanner_Read(SdScanner_r self, SdToken_r* out_token); /* true = token was read, false = eof */
-
-/* SdParser **********************************************************************************************************/
-SdResult       SdParser_ParseProgram(SdEnv_r env, const char* text, SdValue_r* out_program_node);
-
-/* SdEngine **********************************************************************************************************/
-SdEngine*      SdEngine_New(SdEnv_r env);
-void           SdEngine_Delete(SdEngine* self);
-SdResult       SdEngine_ExecuteProgram(SdEngine_r self);
-SdResult       SdEngine_Call(SdEngine_r self, SdValue_r frame, SdValue_r var_ref, SdList_r arguments,
-                  SdValue_r* out_return);
 
 /*********************************************************************************************************************/
 #ifdef __cplusplus

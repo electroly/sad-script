@@ -1,0 +1,7 @@
+//ERROR: Type mismatch in function: f1
+
+function f1 (x:Int|Bool) {
+   return true
+}
+
+(println (f1 "Hello"))
