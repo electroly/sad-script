@@ -3497,6 +3497,7 @@ static void SdScanner_Tokenize(SdScanner_r self, const char* text) {
             } else { /* something else starting with 0xCE */
                SdStringBuf_AppendChar(current_text, ch); /* same as default case */
             }
+            break;
          }
 
          /* Whitespace is ignored. */
