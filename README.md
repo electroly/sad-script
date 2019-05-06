@@ -27,10 +27,10 @@ for i from 1 to 100 {
   var multiple-of-5 = (zero? [i % 5])
   
   (println match multiple-of-3 multiple-of-5 {
-  	case true true: "FizzBuzz"
-  	case true false: "Fizz"
-  	case false true: "Buzz"
-  	default: i
+    case true true: "FizzBuzz"
+    case true false: "Fizz"
+    case false true: "Buzz"
+    default: i
   })
 }
 ```
