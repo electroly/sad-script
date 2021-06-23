@@ -93,14 +93,14 @@
          </tr>
       </table>
 
-      <script src="http://code.jquery.com/jquery-2.1.3.min.js"></script>
-      <script src="http://cdnjs.cloudflare.com/ajax/libs/ace/1.1.3/ace.js"></script>
+      <script src="jquery-2.1.3.min.js"></script>
+      <script src="ace.js"></script>
       <script src="sad-script.js"></script>
       <script>
          function hashChange() {
             if (window.location.hash) {
                var share_id = window.location.hash.substr(1);
-               $.get('https://electroly.github.com/sad-script/shared/' + share_id, function (data) {
+               $.get('https://electroly.github.io/sad-script/shared/' + share_id, function (data) {
                   editor.setValue(data);
                   editor.getSession().selection.clearSelection();
                });
