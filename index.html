@@ -1,0 +1,153 @@
+<html>
+   <head>
+      <title>Try Sad-Script!</title>
+      <style>
+         * {
+            font-family: monospace;
+            font-size: 14px;
+         }
+         html {
+            height: 100%;
+         }
+         body {
+            height: 100%;
+            padding: 0px;
+            margin: 0px;
+            background: #202020;
+            color: white;
+         }
+         p, select, button, a, i {
+            font-family: sans-serif;
+            font-size: 14px;
+         }
+         a {
+            color: #E0E0E0;
+         }
+         #code_txt {
+            width: 100%;
+            height: 100%;
+         }
+         #run_td {
+            width: 150px; 
+            text-align: center;
+         }
+         #run_btn {
+            font-size: 20px;
+            width: 130px;
+            height: 75px;
+            margin-top: 10px;
+         }
+         #share_btn {
+            width: 130px;
+            height: 35px;
+         }
+         #sample_cmb {
+            width: 130px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+         }
+         #sample_btn {
+            margin-top: 10px;
+            height: 30px;
+            width: 75px;
+         }
+         #output_td {
+            width: 400px;
+         }
+         #output_txt {
+            width: 100%;
+            height: 100%;
+            font-size: 14px;
+            background: #272822;
+            color: white;
+            border: none;
+         }
+      </style>
+   </head>
+   <body onhashchange="hashChange()">
+      <table width="100%" height="100%" cellpadding="0" cellspacing="0">
+         <tr>
+            <td>
+               <div id="code_txt"></div>
+            </td>
+            <td id="run_td" valign="top">
+               <button id="run_btn" onclick="run()">Run &raquo;</button><br><br>
+               <p><i>Samples:</i></p>
+               <select id="sample_cmb">
+                  <option value="b2e540457b72a2265d3b073b599cf6f5">Julia set</option>
+                  <option value="95ee2b1cd295c2f34850a22b85f9e3a6">Euler #1 - Multiples of 3 and 5</option>
+                  <option value="85393daefca491f6c8f2e5092f704d79">Euler #2 - Even Fibonacci numbers</option>
+                  <option value="c2aea990b09a31f3306262003718dac8">Euler #4 - Largest palindrome product</option>
+                  <option value="199896116a1c5dab4cce132d9a4405ac">Euler #6 - Sum square difference</option>
+                  <option value="eccd9962124bbfc00728d5eb5a42eafd">Euler #7 - 10001st prime</option>
+               </select><br>
+               <button id="sample_btn" onclick="sample()">&laquo; Load</button><br><br>
+               <p><i>Reference:</i></p>
+               <p><a href="prelude.sad" target="_blank"><tt>Prelude.sad</tt></a></p>
+               <p><a href="language.txt" target="_blank">Language grammar</a></p>
+               <p><a href="https://github.com/electroly/sad-script" target="_blank">Sad-Script on GitHub</a></p>
+            </td>
+            <td id="output_td">
+               <textarea id="output_txt" readonly></textarea>
+            </td>
+         </tr>
+      </table>
+
+      <script src="http://code.jquery.com/jquery-2.1.3.min.js"></script>
+      <script src="http://cdnjs.cloudflare.com/ajax/libs/ace/1.1.3/ace.js"></script>
+      <script src="sad-script.js"></script>
+      <script>
+         function hashChange() {
+            if (window.location.hash) {
+               var share_id = window.location.hash.substr(1);
+               $.get('https://electroly.github.com/sad-script/shared/' + share_id, function (data) {
+                  editor.setValue(data);
+                  editor.getSession().selection.clearSelection();
+               });
+            }
+         }
+
+         function sample() {
+            var name = document.getElementById('sample_cmb').value;
+            if (window.location.hash == '#' + name)
+               hashChange();
+            else
+               window.location.hash = name;
+         }
+
+         function runScript(code) {
+            output = '';
+            Module.ccall('SdRunScript', 'number', ['string', 'string'], ['src/prelude.sad', code]);
+            output_el.value = output;
+         }
+
+         function run() {
+            runScript(editor.getValue());
+         }
+
+         var btn_el = document.getElementById('run_btn');
+         var output_el = document.getElementById('output_txt');
+         var output = '';
+
+         var editor = ace.edit("code_txt");
+         editor.setTheme("ace/theme/monokai");
+         editor.getSession().setMode("ace/mode/javascript");
+         editor.getSession().setTabSize(3);
+         editor.getSession().setOption("useWorker", false);
+         editor.getSession().setUseWrapMode(true);
+         editor.setShowPrintMargin(false);
+         editor.setHighlightGutterLine(false);
+         editor.setFontSize(14);
+
+         Module['print'] = function(text) {
+            output += text + '\n';
+         };
+
+         Module['printErr'] = function(text) {
+            output += text + '\n';
+         }
+
+         hashChange();
+      </script>
+   </body>
+</html>

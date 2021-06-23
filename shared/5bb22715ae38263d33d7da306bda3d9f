@@ -1,0 +1,54 @@
+// Julia set in ASCII art
+
+var wi = 40
+var w = (int.to-double wi)
+var hi = 30
+var h = (int.to-double hi)
+var max-iterations = 26
+var c_re = -0.7
+var c_im = 0.27015
+
+var old_re = 0.
+var old_im = 0.
+var zoom = 1.
+var move_x = 0.
+var move_y = 0.
+var color = 0
+
+var charset = (list "@" "W" "%" "&" "$" "#" "O" "I" "o" "+" "^" "," "." " " )
+
+var image = (list)
+
+for yi from 0 to [hi - 1] {
+   var y = (int.to-double yi)
+   for xi from 0 to [wi - 1] {
+      var x = (int.to-double xi)
+      var new_re = [[[1.5 * [x - [w / 2.]]] / [[0.5 * zoom] * w]] + move_x]
+      var new_im = [[[y - [h / 2.]] / [[0.5 * zoom] * h]] + move_y]
+      var stop = false
+      var i = 0
+      while (not stop) {
+         set old_re = new_re
+         set old_im = new_im
+         set new_re = [[[old_re * old_re] - [old_im * old_im]] + c_re]
+         set new_im = [[[2. * old_re] * old_im] + c_im]
+         if [[[new_re * new_re] + [new_im * new_im]] > 4.] {
+            set stop = true
+         }
+         set i = [i + 1]
+         if [i > max-iterations] {
+            set stop = true
+         }
+      }
+      [image += [[i - 1] / 2]]
+   }
+   [image += false]
+}
+
+for x in image {
+   (print match x {
+      case Int: [charset @ x]
+      case false: "\n"
+      default: "???"
+   })
+}

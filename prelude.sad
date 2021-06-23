@@ -1,0 +1,779 @@
+// Sad-Script Prelude
+// Copyright (c) 2015, Brian Luft.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+// following conditions are met:
+//
+// - Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+// disclaimer.
+// - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+// following disclaimer in the documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+// WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
+// USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Intrinsics /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+import function type-of (x)
+import function hash (x)
+import function to-string (x)
+import function print (x)
+import function get-type (code) // 0=Nil, 1=Int, 2=Double, 3=Bool, 4=String, 5=List, 6=Function, 7=Error, 8=Type
+
+import function + (a b)
+import function - (a b)
+import function * (a b)
+import function / (a b)
+import function % (a b)
+import function sin (x)
+import function cos (x)
+import function tan (x)
+import function asin (x)
+import function acos (x)
+import function atan (x)
+import function atan2 (y x)
+import function sinh (x)
+import function cosh (x)
+import function tanh (x)
+import function exp (x)
+import function log (x)
+import function log10 (x)
+import function ** (a b)
+import function sqrt (x)
+import function ceil (x)
+import function floor (x)
+
+import function bitwise-and (a b)
+import function bitwise-or (a b)
+import function bitwise-xor (a b)
+import function bitwise-shift-left (a b)
+import function bitwise-shift-right (a b)
+
+// note: no short circuiting
+import function and (a b)
+import function or (a b)
+import function not (x)
+
+import function = (a b)
+import function int.< (a b)
+import function int.to-double (x)
+import function double.< (a b)
+import function double.to-int (x)
+import function string.< (a b)
+
+import function list.length (self) 
+import function list.get-at (self index) 
+import function list.set-at! (self index value) 
+import function list.insert-at! (self index value) 
+import function list.remove-at! (self index) 
+
+import function string.length (self) 
+import function string.get-at (self index)
+import function string.join (separator strings)
+
+import function error (message)
+import function error.message (self)
+
+// Constants //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var Nil = (get-type 0)
+var Int = (get-type 1)
+var Double = (get-type 2)
+var Bool = (get-type 3)
+var String = (get-type 4)
+var List = (get-type 5)
+var Function = (get-type 6)
+var Error = (get-type 7)
+var Type = (get-type 8)
+var Any = (get-type 9)
+
+// Basics /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function list xs = xs
+function nil? (self) = [self = Nil]
+function nil-or-error? (self) = [[self = Nil] or [self = Error]]
+function non-nil? (self) = (not (nil? self))
+function error? (self) = [self = Error]
+function zero? (self) = [self = 0]
+function true? (self) = [self = true]
+function false? (self) = [self = false]
+function printv (x) = (print (to-string x))
+function != (a b) = (not [a = b])
+
+function die! (x) { // allow die to be used in an expression
+   die x
+}
+
+function println (x) {
+   (printv x)
+   (print "\n")
+}
+
+function list.append! (self value) {
+   var index = (list.length self)
+   [self list.insert-at! index value]
+}
+
+function += (self item) = [self list.append! item]
+
+function @ (self index) = match {
+   case String Int: [self string.get-at index]
+   case List Int: [self list.get-at index]
+   default: (die! "Expected (String Int) or (List Int).")
+}
+
+function @= (self index value) = [self list.set-at! index value]
+
+function length (self) = match {
+   case String: [self string.length]
+   case List: [self list.length]
+   default: (die! "Expected String or List.")
+}
+
+function pipe pipeline {
+   var pipeline-length = (list.length pipeline)
+
+   if (zero? pipeline-length) {
+      return nil
+   }
+
+   var value = [pipeline @ 0]
+   for i from 1 to [pipeline-length - 1] {
+      var step = [pipeline @ i]
+      set value = (step value)
+   }
+   return value
+}
+
+function compare (x y) {
+   if [x < y] {
+      return -1
+   } elseif [x > y] {
+      return 1
+   } else {
+      return 0
+   }
+}
+
+// returns (list is-exact index)
+function binary-search (key-selector-func search-key lst) {
+   return (binary-search-with-custom-comparator compare key-selector-func search-key lst)
+}
+
+// returns (list is-exact index)
+function binary-search-with-custom-comparator (compare-func key-selector-func search-key lst) {
+   var first = 0
+   var last = [(list.length lst) - 1]
+
+   while [first <= last] {
+      var pivot = [[first + last] / 2]
+      var pivot-key = (key-selector-func [lst @ pivot])
+      var compare = (compare-func pivot-key search-key)
+
+      if [compare < 0] { // pivot-key < search-key
+         set first = [pivot + 1]
+
+         if [first > last] { // pivot is the closest non-match less than search-key, but we want the next highest.
+            return (list false [pivot + 1])
+         }
+      } elseif [compare > 0] { // pivot-key > search-key
+         set last = [pivot - 1]
+
+         if [first > last] { // pivot is the closest non-match higher than search-key.
+            return (list false pivot)
+         }
+      } else { // pivot-key = search-key
+         return (list true pivot)
+      }
+   }
+
+   // the list is empty
+   return (list false 0)
+}
+
+function get-type-number (x) = match {
+   case Nil: 0
+   case Int: 1
+   case Double: 2
+   case Bool: 3
+   case String: 4
+   case List: 5
+   case Function: 6
+   case Error: 7
+   case Type: 8
+}
+
+function min (xs) {
+   var min-value = nil
+   for x in xs {
+      if [(nil? min-value) or [x > min-value]] {
+         set min-value = x
+      }
+   }
+   return min-value
+}
+
+function max (xs) {
+   var max-value = nil
+   for x in xs {
+      if [(nil? max-value) or [x > max-value]] {
+         set max-value = x
+      }
+   }
+   return max-value
+}
+
+function list.< (x y) {
+   var x-length = (length x)
+   var y-length = (length y)
+   var min-length = (min (list x-length y-length))
+   for i from 0 to [min-length - 1] {
+      if [[x @ i] < [y @ i]] {
+         return true
+      }
+   }
+   return [x-length < y-length]
+}
+
+function bool.< (x y) = match {
+   case false true: true
+   default: false
+}
+
+function < (x y) = match {
+   case Nil Nil: false
+   case Int Int: [x int.< y]
+   case Double Double: [x double.< y]
+   case Bool Bool: [x bool.< y]
+   case String String: [x string.< y]
+   case List List: [x list.< y]
+   case Function Any: (die! "Functions are not ordered.")
+   case Any Function: (die! "Functions are not ordered.")
+   case Error Any: (die! "Errors are not ordered.")
+   case Any Error: (die! "Errors are not ordered.")
+   case Type Any: (die! "Types are not ordered.")
+   case Any Type: (die! "Types are not ordered.")
+   default: [(get-type-number x) int.< (get-type-number y)]
+}
+
+function <= (x y) {
+   return [[x < y] or [x = y]]
+}
+
+function > (x y) {
+   return (not [[x < y] or [x = y]])
+}
+
+function >= (x y) {
+   return (not [x < y])
+}
+
+function abs (x) {
+   if [x < 0] {
+      return [-1 * x]
+   } else {
+      return x
+   }
+}
+
+// Streams ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A stream is like IEnumerable.
+// The stream is a function.  You call the stream and it returns an iterator.
+// The iterator is a function.  You call the iterator repeatedly and it returns a value, or nil to signal the end.
+
+function to-stream (x) = match {
+   case List: (list.to-stream x)
+   case Function: x
+   default: (error "Invalid type.")
+}
+
+function list.to-stream (lst) = \() {
+   var i = 0
+   var n = (list.length lst)
+   return \() {
+      if [i < n] {
+         var item = [lst @ i]
+         set i = [i + 1]
+         return item
+      } else {
+         return nil
+      }
+   }
+}
+
+function to-list (xs) {
+   switch {
+      case List: {
+         return xs
+      }
+      case Function: {
+         var lst = (list)
+         for x in xs {
+            [lst += x]
+         }
+         return lst
+      }
+      default: {
+         die "Expected a list or stream."
+      }
+   }
+}
+
+function ... args = \() {
+   var low = 0
+   var high = 0
+   switch (list.length args) {
+      case 1: {
+         set low = [args @ 0]
+         set high = nil
+      }
+      case 2: {
+         set low = [args @ 0]
+         set high = [args @ 1]
+      }
+      default: {
+         die "Wrong number of arguments to ..."
+      }
+   }
+   var n = low
+   return \() {
+      if (non-nil? high) {
+         if [n > high] {
+            return nil
+         }
+      } 
+
+      var old-n = n
+      set n = [n + 1]
+      return old-n
+   }
+}
+
+function reverse (xs) {
+   var xs-list = [xs to-list]
+   return \() {
+      var i = [[xs-list list.length] - 1]
+      return \() {
+         if [i < 0] {
+            return nil
+         } else {
+            var old-i = i
+            set i = [i - 1]
+            return [xs-list @ old-i]
+         }
+      }
+   }
+}
+
+function skip (n xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      for i from 1 to n {
+         (iterator)
+      }
+      return iterator
+   }
+}
+
+function take (n xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      var num-so-far = 0
+      return \() {
+         if [num-so-far < n] {
+            set num-so-far = [num-so-far + 1]
+            return (iterator)
+         } else {
+            return nil
+         }
+      }
+   }
+}
+
+function filter (predicate xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      return \() {
+         while true {
+            var value = (iterator)
+            if (nil-or-error? value) {
+               return value
+            } elseif (predicate value) {
+               return value
+            }
+         }
+      }
+   }
+}
+
+function map (selector xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      return \() {
+         var value = (iterator)
+         return match value {
+            case Nil: nil
+            case Error: value
+            default: (selector value)
+         }
+      }
+   }
+}
+
+function reduce (reducer xs) {
+   var stream = (to-stream xs)
+   var iterator = (stream)
+   var value = (iterator)
+   if (nil-or-error? value) {
+      return value
+   }
+   while true {
+      var new-value = (iterator)
+      switch new-value {
+         case Error: {
+            return new-value
+         }
+         case Nil: {
+            return value
+         }
+         default: {
+            set value = (reducer value new-value)
+         }
+      }
+   }
+}
+
+function first (xs) {
+   switch {
+      case String: {
+         if [(string.length xs) > 0] {
+            return [xs @ 0]
+         } else {
+            return nil
+         }
+      }
+      case List: {
+         if [(list.length xs) > 0] {
+            return [xs @ 0]
+         } else {
+            return nil
+         }
+      }
+      case Function: {
+         var iterator = (xs)
+         return (iterator)
+      }
+      default: {
+         die "Expected a string, list, or function."
+      }
+   }
+}
+
+function last (xs) {
+   switch {
+      case String: {
+         if [(string.length xs) > 0] {
+         return [xs @ [(string.length xs) - 1]]
+         } else {
+            return nil
+         }
+      }
+      case List: {
+         if [(list.length xs) > 0] {
+         return [xs @ [(list.length xs) - 1]]
+         } else {
+            return nil
+         }
+      }
+      case Function: {
+         var iterator = (xs)
+         var last-value = nil
+         while true {
+            var next-value = (iterator)
+            if (nil? next-value) {
+               return last-value
+            } else {
+               set last-value = next-value
+            }
+         }
+      }
+      default: {
+         die "Expected a string, list, or function."
+      }
+   }
+}
+
+function length-less-than? (n xs) {
+   switch xs {
+      case String: {
+         return [(string.length xs) < n]
+      }
+      case List: {
+         return [(list.length xs) < n]
+      }
+      case Function: {
+         var iterator = (xs)
+         for i from 1 to [n - 1] {
+            (iterator)
+         }
+         return (nil? (iterator))
+      }
+      default: {
+         die "Expected a string, list, or function."
+      }
+   }
+}
+
+function concat seqs {
+   var streams = (pipe seqs (map to-stream) to-list)
+   var num_streams = (list.length seqs)
+   return \() {
+      var iterators = (pipe streams (map \x (x)) to-list)
+      var which_stream = 0
+      return \() {
+         while [which_stream < num_streams] {
+            var iterator = [iterators @ which_stream]
+            var value = (iterator)
+            if (nil? value) {
+               set which_stream = [which_stream + 1]
+            } else {
+               return value
+            }
+         }
+      }
+   }
+}
+
+function sort (key-selector-func xs) {
+   if (length-less-than? 2 xs) {
+      return xs
+   } else {
+      var pivot-key = (key-selector-func (first xs))
+      var left = (sort key-selector-func (filter \x [(key-selector-func x) < pivot-key] xs))
+      var middle = (filter \x [(key-selector-func x) = pivot-key] xs)
+      var right = (sort key-selector-func (filter \x [(key-selector-func x) > pivot-key] xs))
+      return (concat left middle right)
+   }
+}
+
+function take-while (predicate xs) {
+   var stream = (to-stream xs)
+   return \() {
+      var iterator = (stream)
+      var done = false
+      return \() {
+         var x = (iterator)
+         if done {
+            return nil
+         } elseif (predicate x) {
+            return x
+         } else {
+            set done = true
+            return nil
+         }
+      }
+   }
+}
+
+function cross-join (xs ys) {
+   var xs-stream = (to-stream xs)
+   var ys-stream = (to-stream ys)
+   return \() {
+      var xs-iterator = (xs-stream)
+      var ys-iterator = nil
+      var x = nil
+      return \() {
+         if (nil? xs-iterator) {
+            return nil
+         }
+         while true {
+            if (nil? x) {
+               set x = (xs-iterator)
+               if (nil? x) {
+                  set xs-iterator = nil
+                  return nil
+               }
+               set ys-iterator = (ys-stream)
+            }
+            var y = (ys-iterator)
+            if (nil? y) {
+               set ys-iterator = nil
+               set x = nil
+            } else {
+               return (list x y)
+            }
+         }
+      }
+   }
+}
+
+function any? (xs) = (non-nil? (first xs))
+function none? (xs) = (nil? (first xs))
+
+// hashtable //////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A list of buckets, where the index into the list equals [hash % number-of-buckets]
+// Each bucket is a list of pairs.
+// Each pair is a two-element list: (list key value)
+
+var HASHTABLE-BUCKET-COUNT = 37
+
+function hashtable () {
+   var x = (list)
+   for i from 1 to HASHTABLE-BUCKET-COUNT {
+      [x += nil]
+   }
+   return x
+}
+
+// returns nil if the key does not exist in the hashtable.
+function hashtable.get (self key) {
+   var bucket-index = [(hash key) % HASHTABLE-BUCKET-COUNT]
+   var bucket = [self @ bucket-index]
+   if [bucket nil?] {
+      return nil
+   } else {
+      for pair in bucket {
+         var pair-key = [pair @ 0]
+         if [pair-key = key] {
+            return [pair @ 1]
+         }
+      }
+      return nil
+   }
+}
+
+// returns true if a value was overwritten, false if not.
+function hashtable.set! (self key value) {
+   var new-pair = (list key value)
+   var bucket-index = [(hash key) % HASHTABLE-BUCKET-COUNT]
+   var bucket = [self @ bucket-index]
+   if [bucket nil?] {
+      set bucket = (list new-pair)
+      [self @= bucket-index bucket]
+   } else {
+      // If the key already exists then overwrite it.
+      for pair at i in bucket {
+         if [[pair @ 0] = key] {
+            [bucket @= i new-pair]
+            return true
+         }
+      }
+      [bucket += new-pair]
+   }
+   return false
+}
+
+function hashtable.remove! (self key) {
+   var bucket-index = [(hash key) % HASHTABLE-BUCKET-COUNT]
+   var bucket = [self @ bucket-index]
+   if (not [bucket nil?]) {
+      for pair at i in bucket {
+         if [[pair @ 0] = key] {
+            [bucket list.remove-at! i]
+            return true
+         }
+      }
+   }
+   return false
+}
+
+// dict ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A sorted association list: (list (list key-1 value-1) (list key-2 value-2) ...)
+
+function dict () = (list)
+function dict-pair (key value) = (list key value)
+var DICT-PAIR.KEY = 0
+var DICT-PAIR.VALUE = 1
+
+function dict.set! (self key value) {
+   var pair = (dict-pair key value)
+   var (exact index) = [self dict.pair-index key]
+   if exact {
+      [self @= index pair]
+   } else {
+      [self list.insert-at! index pair]
+   }
+}
+
+function dict.get (self key) { // returns the value or nil
+   var (exact index) = [self dict.pair-index key]
+   if exact {
+      return [[self @ index] @ DICT-PAIR.VALUE]
+   } else {
+      return nil
+   }
+}
+
+function dict.remove! (self key) { // returns true if the item was removed, false if it wasn't in the dict.
+   var (exact index) = [self dict.pair-index key]
+   if exact {
+      [self list.remove-at! index]
+   }
+   return exact
+}
+
+function dict.pair-index (self key) { // returns (list exact index)
+   return (binary-search \x [x @ DICT-PAIR.KEY] key self)
+}
+
+// chain //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A doubly-linked list: (list head-node count)
+// Each node: (list value prev next)
+
+function chain () = (list nil 0)
+var CHAIN.HEAD = 0 // chain-node or nil
+var CHAIN.COUNT = 1 // int
+
+function chain-node (value prev next) = (list value prev next)
+var CHAIN-NODE.VALUE = 0 // any
+var CHAIN-NODE.PREV = 1 // chain-node or nil
+var CHAIN-NODE.NEXT = 2 // chain-node or nil
+
+function chain.push! (self value) {
+   var old-head = [self @ CHAIN.HEAD]
+   var new-head = (chain-node value nil old-head)
+   [self @= CHAIN.HEAD new-head]
+   if (non-nil? old-head) {
+      [old-head @= CHAIN-NODE.PREV new-head]
+   }
+   [self @= CHAIN.COUNT [[self @ CHAIN.COUNT] + 1]]
+}
+
+function chain.pop! (self) {
+   var old-head = [self @ CHAIN.HEAD]
+   if (nil? old-head) {
+      return nil
+   } else {
+      var new-head = [head @ CHAIN-NODE.NEXT]
+      [self @= CHAIN.HEAD new-head]
+      if (non-nil? new-head) {
+         [new-head @= CHAIN-NODE.PREV nil]
+      }
+      [self @= CHAIN.COUNT [[self @ CHAIN.COUNT] - 1]]
+      return [old-head @ CHAIN-NODE.VALUE]
+   }
+}
+
+function chain.remove! (self node) {
+   var prev = [node @ CHAIN-NODE.PREV]
+   var next = [node @ CHAIN-NODE.NEXT]
+   if (nil? prev) { // this is the head node
+      [self @= CHAIN.HEAD next]
+   } else { // this is a middle or tail node
+      [prev @= chain.NEXT node]
+   }
+   if (non-nil? next) {
+      [next @= chain.PREV prev]
+   }
+   [self @= CHAIN.COUNT [[self @ CHAIN.COUNT] - 1]]
+}
