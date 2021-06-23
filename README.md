@@ -2,12 +2,10 @@ Sad-Script
 ----------
 
 <p align="center">
-<a href="http://electroly.com/sad/try.html#b2e540457b72a2265d3b073b599cf6f5"><b>Try it now in your browser!</b></a>
+<a href="https://electroly.github.io/sad-script/#b2e540457b72a2265d3b073b599cf6f5"><b>Try it now in your browser!</b></a>
 </p>
 
-<p align="center">
-<a href="http://electroly.com/sad/sad-script.zip"><b>Download the latest build (with source)!</b></a>
-</p>
+*Project status: This project is finished and the author has moved on, but it works as described and serves as an interesting exercise in programming language implementation. Commit [`f5c7a2c`](https://github.com/electroly/sad-script/commit/f5c7a2c4717713374432a924ddc57782b4893d16) implements the language as documented below, with subsequent commits adding undocumented support for immutability and type annotations.*
 
 A **dynamically-typed, interpreted, garbage-collected language** with 8 data types: `Int`, `Double`, `Bool`, `String`, `List`, `Function`, `Error`, and `Type`.  There are no semicolons, and whitespace is insignificant.  Identifiers can contain anything except parentheses, braces, brackets, double quotes, colons, backslashes, the lambda symbol (`λ`), and a small handful of reserved keywords.  Identifiers must contain at least one character that isn't a digit and isn't a period, in order to distinguish identifiers from integer and double literals.  Variables must be declared with `var` before they are used.  A default value must always be provided.
 
